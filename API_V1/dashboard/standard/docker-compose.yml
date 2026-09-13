@@ -1,0 +1,110 @@
+# The dashboard, on its own.
+#
+#   cp .env.example .env      # same POSTGRES_PASSWORD as ../../database/.env
+#   docker compose up -d
+#   open http://127.0.0.1:8088
+#
+# Expects the archive database to be running first. It joins that database's
+# network by name, which is why the folders can be separate Compose projects
+# and still find each other.
+#
+# Pointing at a database somewhere else? Set DATABASE_URL to it and remove the
+# `networks:` blocks below - the dashboard needs a PostgreSQL with the archive
+# schema, not specifically the one in ../../database.
+#
+# There is no login, only the password gate (off until DASHBOARD_GATE_PASSWORD
+# is set). The port is bound to localhost; put a reverse proxy with whatever
+# authentication you already have in front of it before exposing it. Anyone
+# who gets past the port can also start a test crawl from the Sources page
+# (one at a time, public hosts only), which is one more reason.
+
+name: ${ARCHIVE_STACK:-xtracting}-dashboard
+
+services:
+  dashboard:
+    build:
+      # The image also carries ../../crawlkit, so the build context is the
+      # API_V1 folder - see the Dockerfile.
+      context: ../..
+      dockerfile: dashboard/standard/Dockerfile
+      # Named, not given a default: Compose passes it through only when it is
+      # set (environment or .env), so the Dockerfile's ARG stays the ONE place
+      # the base image tag is written - the tag that has to match crawlkit's
+      # playwright pin.
+      #
+      #     DASHBOARD_BASE=docker.io/python:3.12-slim docker compose build
+      #
+      # builds a dashboard without a browser, about 4 GB smaller; the Sources
+      # page then says "Rendered mode is not available in this dashboard build"
+      # and everything else works.
+      args:
+        - DASHBOARD_BASE
+    restart: unless-stopped
+    environment:
+      # Passed as parts, not as one interpolated URL. Nested ${...} defaults are
+      # not portable across Compose implementations, and a password containing
+      # @ or / would break a hand-built URL anyway. Set DATABASE_URL instead to
+      # point at a database somewhere else.
+      DATABASE_URL: "${DATABASE_URL:-}"
+      POSTGRES_USER: "${POSTGRES_USER:-xtracting}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-}"
+      POSTGRES_DB: "${POSTGRES_DB:-xtracting_archive}"
+      POSTGRES_HOST: "${POSTGRES_HOST:-xtracting_db}"
+      POSTGRES_PORT: "${POSTGRES_PORT:-5432}"
+      DASHBOARD_SEED: "${DASHBOARD_SEED:-true}"
+      DASHBOARD_TILE_URL: "${DASHBOARD_TILE_URL:-https://tile.openstreetmap.org/{z}/{x}/{y}.png}"
+      DASHBOARD_PLACES_REFRESH_MINUTES: "${DASHBOARD_PLACES_REFRESH_MINUTES:-15}"
+      DASHBOARD_STATEMENT_TIMEOUT_SECONDS: "${DASHBOARD_STATEMENT_TIMEOUT_SECONDS:-30}"
+      DASHBOARD_MAP_MAX_ENTITIES: "${DASHBOARD_MAP_MAX_ENTITIES:-500}"
+      DASHBOARD_GRAPH_MAX_NEIGHBOURS: "${DASHBOARD_GRAPH_MAX_NEIGHBOURS:-120}"
+      DASHBOARD_ALLOW_PRIVATE_HOSTS: "${DASHBOARD_ALLOW_PRIVATE_HOSTS:-false}"
+      DASHBOARD_TEST_TIMEOUT_SECONDS: "${DASHBOARD_TEST_TIMEOUT_SECONDS:-120}"
+      DASHBOARD_XTRACTING_URL: "${DASHBOARD_XTRACTING_URL:-https://xtracting.io}"
+
+      # ── The gate ────────────────────────────────────────────────────
+      # A variable the container does not receive is a variable the app
+      # reads as empty, and for this one "empty" means NO GATE AT ALL. A
+      # password sitting in .env that never reaches the process is a
+      # dashboard that looks protected in the file and is open on the
+      # port, with nothing anywhere saying so - which is exactly what
+      # happened before these four lines existed. Anything added to
+      # app/gate.py has to be added here too.
+      #
+      # No defaults: empty must stay empty, or a placeholder would become
+      # somebody's password.
+      DASHBOARD_GATE_PASSWORD: "${DASHBOARD_GATE_PASSWORD:-}"
+      DASHBOARD_TURNSTILE_SITE_KEY: "${DASHBOARD_TURNSTILE_SITE_KEY:-}"
+      DASHBOARD_TURNSTILE_SECRET: "${DASHBOARD_TURNSTILE_SECRET:-}"
+      DASHBOARD_GATE_MAX_AGE_HOURS: "${DASHBOARD_GATE_MAX_AGE_HOURS:-24}"
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+    ports:
+      # Bound to localhost: the gate is off by default, and the archive behind
+      # it holds your extractions. DASHBOARD_PORT is where it appears on your machine;
+      # inside the container it is always 8088.
+      - "127.0.0.1:${DASHBOARD_PORT:-8088}:8088"
+    # So POSTGRES_HOST=host.docker.internal reaches a database running on this
+    # machine but outside a container. Docker Desktop provides that name on its
+    # own; Docker Engine on Linux does not, and without this line it simply does
+    # not resolve. Podman answers to host.containers.internal natively and
+    # accepts this too.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - archive
+    healthcheck:
+      # Python rather than curl: the slim base image has no curl, and the
+      # check must work on both bases.
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8088/healthz', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+networks:
+  archive:
+    # Created by ../../database. Start that first, or this will not come up.
+    # ARCHIVE_STACK must match the value in ../../database/.env, or this joins a
+    # network the database is not on.
+    name: ${ARCHIVE_STACK:-xtracting}-archive
+    external: true

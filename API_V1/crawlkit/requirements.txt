@@ -1,0 +1,27 @@
+# What the I/O half of crawlkit needs.
+#
+# The pure half - hashing, forms, learn, classify, legal, apply, netguard -
+# needs nothing beyond the standard library, and that is deliberate: the
+# dashboard's link picker calls learn() on every click, and it should not
+# have to pull in a browser to do it. The modules that touch the network
+# (robots, fetch/, content, files, crawl, testrun) need the packages below.
+#
+# Both services include this file rather than repeating it:
+#     -r ../crawlkit/requirements.txt
+# and both Dockerfiles build from the API_V1 folder so that this file and
+# the package next to it end up in the image together.
+#
+# PLAYWRIGHT AND THE BASE IMAGE MUST MATCH. The pip package talks to browser
+# binaries that ship in mcr.microsoft.com/playwright/python:v<version>-noble;
+# a pip pin newer than the base image means "Executable doesn't exist" at the
+# first rendered fetch, and the message does not mention versions at all. When
+# you raise one, raise the other - the tag is in crawler/Dockerfile and
+# dashboard/standard/Dockerfile.
+
+httpx==0.28.1              # fetch/httpx_engine.py, robots.py, files.py: HTTP with per-hop redirect control
+beautifulsoup4==4.15.0     # content.py, files.py: link extraction and boilerplate stripping
+lxml==6.1.3                # the parser behind beautifulsoup4 - html.parser silently truncates broken pages
+protego==0.6.2             # robots.py: RFC 9309 wildcards, which urllib.robotparser does not do
+pypdf==6.17.0              # files.py: the text layer of PDFs
+openpyxl==3.1.5            # files.py: xlsx cells as text
+playwright==1.62.0         # fetch/playwright_engine.py: the Rendered engine, optional at runtime

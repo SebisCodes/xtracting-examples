@@ -1,0 +1,298 @@
+name: tests
+
+# The four suites this repository has, one job per folder under API_V1/. Nothing here is
+# specific to GitHub: every command below is the command you would type on a
+# laptop, in the folder the job names, and the docs say the same ones.
+#
+# Two differences on a laptop, both deliberate:
+#
+#   * the archive. CI starts a fresh one from `database/.env.example` with a
+#     throw-away password, because a runner has nothing else on port 5432.
+#     On your machine use the committed `database/.env.test` instead - same
+#     schema, its own volume and network, published on 55432 - and put that
+#     port into DATABASE_URL. Never point a suite at the archive you keep:
+#     the flow tests write into it and clean up after themselves by prefix.
+#   * the browser, in the crawler job. `playwright install --with-deps
+#     chromium` also installs system libraries and therefore wants root; if
+#     you already have them, `python -m playwright install chromium` is
+#     enough.
+#
+# The "Start the archive" step is repeated verbatim in all four jobs rather
+# than shared: GitHub Actions does not support YAML anchors, and a composite
+# action for eight lines would hide the one thing a reader wants to see.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  database:
+    name: schema
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start the archive
+        working-directory: API_V1/database
+        run: |
+          cp .env.example .env
+          sed -i 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ci_password/' .env
+          docker compose up -d
+          # "healthy" alone is not enough. pg_isready answers on the unix
+          # socket, and the temporary server that runs init/01-04 listens
+          # there too - so the container can report healthy while the schema
+          # is still being created, and the next step would talk to half an
+          # archive. Waiting for the last table the init scripts create waits
+          # for all of them, and for the real server that follows.
+          for _ in $(seq 1 90); do
+            if docker compose exec -T xtracting_db \
+                 psql -U xtracting -d xtracting_archive -tAc \
+                 "SELECT to_regclass('monitoring.scraper_errors') IS NOT NULL" 2>/dev/null \
+                 | grep -qx t; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "the archive never finished loading database/init/"
+          docker compose logs
+          exit 1
+
+      - name: Verify the schema
+        working-directory: API_V1/database
+        run: |
+          docker compose exec -T xtracting_db \
+            psql -U xtracting -d xtracting_archive -v ON_ERROR_STOP=1 -f /verify.sql \
+            | tee /tmp/verify.out
+          # psql exits 0 on a FAIL row, because a failed check is data, not an
+          # error. The suite's own verdict is what decides this job.
+          grep -q "ALL .* CHECKS PASSED" /tmp/verify.out
+
+      - name: Verify the crawler schema
+        working-directory: API_V1/database
+        run: |
+          # A second suite over the tables init/03-scraper.sql adds - the
+          # crawler's own, and the configuration the dashboard writes. Both
+          # files are mounted into the container by docker-compose.yml, so
+          # this needs no psql on the runner.
+          docker compose exec -T xtracting_db \
+            psql -U xtracting -d xtracting_archive -v ON_ERROR_STOP=1 -f /verify-scraper.sql \
+            | tee /tmp/verify-crawler.out
+          grep -q "ALL .* CHECKS PASSED" /tmp/verify-crawler.out
+
+  collector:
+    name: collector
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        working-directory: API_V1/collector
+        run: pip install -r requirements.txt pytest
+
+      - name: Unit tests
+        working-directory: API_V1/collector
+        run: python -m pytest tests/test_store.py -q
+
+      - name: Start the archive
+        working-directory: API_V1/database
+        run: |
+          cp .env.example .env
+          sed -i 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ci_password/' .env
+          docker compose up -d
+          # "healthy" alone is not enough. pg_isready answers on the unix
+          # socket, and the temporary server that runs init/01-04 listens
+          # there too - so the container can report healthy while the schema
+          # is still being created, and the next step would talk to half an
+          # archive. Waiting for the last table the init scripts create waits
+          # for all of them, and for the real server that follows.
+          for _ in $(seq 1 90); do
+            if docker compose exec -T xtracting_db \
+                 psql -U xtracting -d xtracting_archive -tAc \
+                 "SELECT to_regclass('monitoring.scraper_errors') IS NOT NULL" 2>/dev/null \
+                 | grep -qx t; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "the archive never finished loading database/init/"
+          docker compose logs
+          exit 1
+
+      - name: Integration tests
+        working-directory: API_V1/collector
+        env:
+          # The archive publishes 5432 on the runner's localhost, so the suite
+          # reaches it without joining the compose network.
+          DATABASE_URL: postgresql://xtracting:ci_password@127.0.0.1:5432/xtracting_archive
+        run: python tests/integration.py
+
+  dashboard:
+    name: dashboard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        working-directory: API_V1/dashboard/standard
+        # requirements.txt pulls in ../../crawlkit/requirements.txt, so this one
+        # command installs the crawl code's dependencies too - the dashboard
+        # runs "Test this configuration" with them.
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      # crawlkit is a library, not a service, and both images copy it. Its own
+      # suite runs first and on its own, so that a broken crawl rule fails as
+      # "crawlkit" rather than as a dashboard test three steps further down.
+      - name: crawlkit unit tests
+        working-directory: API_V1
+        run: python -m pytest crawlkit -q
+
+      - name: Unit tests
+        working-directory: API_V1/dashboard/standard
+        run: python -m pytest tests/unit -q
+
+      - name: Start the archive
+        working-directory: API_V1/database
+        run: |
+          cp .env.example .env
+          sed -i 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ci_password/' .env
+          docker compose up -d
+          # "healthy" alone is not enough. pg_isready answers on the unix
+          # socket, and the temporary server that runs init/01-04 listens
+          # there too - so the container can report healthy while the schema
+          # is still being created, and the next step would talk to half an
+          # archive. Waiting for the last table the init scripts create waits
+          # for all of them, and for the real server that follows.
+          for _ in $(seq 1 90); do
+            if docker compose exec -T xtracting_db \
+                 psql -U xtracting -d xtracting_archive -tAc \
+                 "SELECT to_regclass('monitoring.scraper_errors') IS NOT NULL" 2>/dev/null \
+                 | grep -qx t; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "the archive never finished loading database/init/"
+          docker compose logs
+          exit 1
+
+      - name: Preseed the archive
+        working-directory: API_V1/dashboard/standard
+        env:
+          DATABASE_URL: postgresql://xtracting:ci_password@127.0.0.1:5432/xtracting_archive
+        # The small, known archive the flow tests assert against. It also
+        # creates the dashboard schema, so the flow tests do not have to be
+        # the first thing that ever touched it.
+        run: python tests/preseed/preseed.py
+
+      - name: Flow tests
+        working-directory: API_V1/dashboard/standard
+        env:
+          DATABASE_URL: postgresql://xtracting:ci_password@127.0.0.1:5432/xtracting_archive
+          # The Sources test runner refuses to crawl a private address - which
+          # is exactly where the stand-in site lives. The flag is the only way
+          # past the guard, and it is set here and nowhere near production.
+          DASHBOARD_ALLOW_PRIVATE_HOSTS: "true"
+        run: python -m pytest tests/flow -q
+
+      - name: Verify the dashboard schema
+        working-directory: API_V1/database
+        run: |
+          # dashboard/standard/sql/verify.sql is not mounted into the container the way
+          # database/verify.sql is, so it goes in through stdin. `-f -` reads
+          # the file, and the runner needs no psql of its own.
+          docker compose exec -T xtracting_db \
+            psql -U xtracting -d xtracting_archive -v ON_ERROR_STOP=1 -f - \
+            < ../dashboard/standard/sql/verify.sql \
+            | tee /tmp/dashboard-verify.out
+          grep -q "ALL .* CHECKS PASSED" /tmp/dashboard-verify.out
+
+  crawler:
+    name: crawler
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        working-directory: API_V1/crawler
+        # requirements.txt pulls in ../crawlkit/requirements.txt: the crawler's
+        # own dependency is the database driver, everything that fetches and
+        # parses a page belongs to crawlkit and is pinned there once.
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Install the browser
+        # For the Rendered engine. Without it test_render_mode_fedlex skips
+        # itself instead of failing, which would quietly stop testing the one
+        # mode that needs a browser.
+        run: python -m playwright install --with-deps chromium
+
+      - name: crawlkit unit tests
+        working-directory: API_V1
+        run: python -m pytest crawlkit -q
+
+      - name: Unit tests
+        working-directory: API_V1/crawler
+        # No arguments: pytest.ini runs tests/unit and the doctests in app/,
+        # which are where backoff, batching and the tag suffix are specified.
+        run: python -m pytest -q
+
+      - name: Start the archive
+        working-directory: API_V1/database
+        run: |
+          cp .env.example .env
+          sed -i 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ci_password/' .env
+          docker compose up -d
+          # "healthy" alone is not enough. pg_isready answers on the unix
+          # socket, and the temporary server that runs init/01-04 listens
+          # there too - so the container can report healthy while the schema
+          # is still being created, and the next step would talk to half an
+          # archive. Waiting for the last table the init scripts create waits
+          # for all of them, and for the real server that follows.
+          for _ in $(seq 1 90); do
+            if docker compose exec -T xtracting_db \
+                 psql -U xtracting -d xtracting_archive -tAc \
+                 "SELECT to_regclass('monitoring.scraper_errors') IS NOT NULL" 2>/dev/null \
+                 | grep -qx t; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "the archive never finished loading database/init/"
+          docker compose logs
+          exit 1
+
+      - name: Flow tests
+        working-directory: API_V1/crawler
+        env:
+          DATABASE_URL: postgresql://xtracting:ci_password@127.0.0.1:5432/xtracting_archive
+        # A real archive, four stand-in hosts in this process and a fake
+        # Xtracting API. Everything it writes is prefixed `_crawlertest` and
+        # removed again; nothing leaves the runner.
+        run: python -m pytest tests/flow -q
+
+      - name: Verify the schema
+        working-directory: API_V1/database
+        run: |
+          docker compose exec -T xtracting_db \
+            psql -U xtracting -d xtracting_archive -v ON_ERROR_STOP=1 -f /verify.sql \
+            | tee /tmp/verify.out
+          grep -q "ALL .* CHECKS PASSED" /tmp/verify.out
+
+      - name: Verify the crawler schema
+        working-directory: API_V1/database
+        run: |
+          docker compose exec -T xtracting_db \
+            psql -U xtracting -d xtracting_archive -v ON_ERROR_STOP=1 -f /verify-scraper.sql \
+            | tee /tmp/verify-crawler.out
+          grep -q "ALL .* CHECKS PASSED" /tmp/verify-crawler.out

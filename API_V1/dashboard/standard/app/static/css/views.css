@@ -1,0 +1,843 @@
+/* ==========================================================================
+ *  Dashboard, Events and Query - the three views that are lists and forms
+ *  rather than charts. app.css owns the tokens, the buttons, the cards and
+ *  the tiles; this file only adds what those three pages need on top.
+ *
+ *  Map, Heatmap, Graph and Diagrams have since started loading this file as
+ *  well, for the pieces they share with the Query form (the place list, the
+ *  Leaflet corrections, the target sizes). Anything added here is therefore
+ *  seen on those views too - and anything that is only about one of these
+ *  three should say so with a selector that names it.
+ *
+ *  NO `overflow` ANYWHERE AN ADDRESS FIELD CAN SIT. The Query form holds a
+ *  typeahead, and its suggestion list is absolutely positioned: an
+ *  `overflow: hidden` on the fieldset, the form or the grid cell clips the
+ *  list away without a trace (see the warning at the top of typeahead.css).
+ *  The one place that scrolls is `.table-scroll`, which no typeahead is in.
+ *
+ *  Print: print.css already knows `.event-card`, `.result` and `.results`
+ *  and keeps each of them on one page, so the class names here are the ones
+ *  it names.
+ * ========================================================================== */
+
+/* ── An error says two things ─────────────────────────────────────────── */
+/*
+ * WHAT HAPPENED, then WHAT TO DO - as two blocks, never as one line.
+ *
+ * The API answers `{error, hint}` with two lowercase fragments, because the
+ * toast prints them as two lines (`.toast-text` over `.toast-hint`). The
+ * in-page notices joined the same two fragments with a space and produced
+ * "the date range ends before it starts swap the two dates, or clear one of
+ * them" - one run-on sentence in which the remedy is impossible to find.
+ *
+ * app.css lays a `.notice` out as a ROW (it was written for an icon beside a
+ * line), so the two halves get a column of their own inside it. Neither half
+ * is shrunk: an error message is the last place to save four pixels.
+ */
+.notice-body { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; }
+.notice-what { margin: 0; }
+.notice-hint { margin: 0; color: var(--muted); }
+
+/* ── Dashboard ────────────────────────────────────────────────────────── */
+
+/* A tile is a link: the whole block is the target, so it is far larger than
+ * the 44 px the guidelines ask for.
+ *
+ * IT HAS TO LOOK LIKE ONE WITHOUT A MOUSE. With the whole cue in `:hover`
+ * a resting tile is pixel-identical to a plain card, so the only route from
+ * the home page into the Diagrams is invisible to anybody reading rather
+ * than pointing. NN/g's guidance for older users
+ * rules out hover-only affordances outright. So the label is painted in the
+ * link colour and the tile ends with a line that says where it goes; hover
+ * and focus stay on top of that as the second layer.
+ */
+.stat-tile--link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+.stat-tile--link .stat-label { color: var(--accent); }
+.stat-go { margin: 0.5rem 0 0; color: var(--accent); font-weight: 500; }
+.stat-tile--link:hover { border-color: var(--accent); background: var(--accent-tint); }
+.stat-tile--link:hover .stat-label,
+.stat-tile--link:hover .stat-go { text-decoration: underline; }
+.stat-tile--link:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+/* The four short periods as a micro bar chart.
+ *
+ * WHY BARS AND NOT ONLY NUMBERS: a grid of twelve numbers has to be read and
+ * ranked in the head; length lands before reading does (NN/g on preattentive
+ * attributes). The numbers stay - four values is few enough to label every
+ * one - and the bars only put them in order at a glance.
+ *
+ * One scale per tile, not one across the tiles: the tiles count different
+ * things (5 sources and 49 ratings are not comparable), so a shared scale
+ * would say something untrue. The windows nest - the last hour is inside the
+ * last day - so the month bar is the tallest and the scale is its value.
+ *
+ * The track is drawn even when the value is zero, which is what makes a zero
+ * read as "counted, none" rather than "no bar drawn here".
+ */
+.stat-periods {
+  margin-top: 0.75rem;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.25rem;
+  align-items: end;
+}
+/* dt must come before dd in the markup; the column is drawn the other way
+ * round, so the reversal is here rather than in dashboard.js. */
+.stat-periods > div { display: flex; flex-direction: column-reverse; min-width: 0; }
+/* These four words ARE the chart's axis - the bars mean nothing without
+ * them. app.css now holds every remark at 16 px, so only the colour is left
+ * to set here; the tile grid below gives the four labels their room. */
+.stat-periods .k { color: var(--muted); }
+.stat-periods .v {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.stat-bar {
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  max-width: 24px;      /* a bar is a thin mark, not a filled slot */
+  height: 2.25rem;
+  background: var(--surface-2);
+  border-radius: 2px;
+}
+.stat-bar > i {
+  display: block;
+  width: 100%;
+  min-height: 2px;      /* zero still shows the baseline it grew from */
+  background: var(--accent);
+  border-radius: 4px 4px 0 0;   /* rounded data end, square on the baseline */
+}
+.stat-bar > i.is-zero { background: var(--line-soft); }
+
+/* The scale, in words, under every tile.
+ *
+ * A bar with no stated scale is a picture, not a number. Two tiles here are
+ * drawn to two different maxima - Beta's "1 in the last month" fills its bar
+ * exactly as far as Alpha's "47" - so without this line the eye compares
+ * them anyway and reads two archives of the same size. The line names the
+ * number the tallest bar stands for, which is the only thing that makes the
+ * four lengths readable as quantities. */
+.stat-scale { margin: 0.25rem 0 0; color: var(--muted); }
+
+/* TWO ROWS, EVENLY FILLED (static/js/dashboard.js: layOutTwoRows says why).
+ * The count comes from the script because CSS cannot count children; four is
+ * the fallback for the eight tiles this page has, so the grid is right
+ * even if the script has not run yet.
+ *
+ * Four labels at full size need room, which is what sets the breakpoint
+ * below: under 60rem two rows of four would be about 90 px wide each and
+ * "month" could not be written under its bar, so the tiles go back to
+ * filling the width they need and the two-row rule is dropped rather than
+ * obeyed into illegibility. */
+#stats.grid--tiles { grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); }
+#stats .stat-tile--empty { display: none; }
+/* Four tiles at 15rem plus the gaps between them is what the fixed grid
+ * needs; below that it would squeeze them to about 230 px and "month" spills
+ * out of its cell (tests/ui/test_dashboard_view.py measures exactly that).
+ * So the two-row rule applies where it fits and the width wins where it does
+ * not - the alignment is worth having, but not at the price of a label. */
+@media (min-width: 68rem) {
+  #stats.grid--tiles {
+    grid-template-columns: repeat(var(--tiles-per-row, 4), minmax(0, 1fr));
+  }
+  #stats .stat-tile--empty { display: block; }
+}
+/* The gap in an odd row: a cell, not a stretched neighbour. */
+.stat-tile--empty { border: none; background: none; box-shadow: none; }
+/* A printer drops backgrounds unless it is told not to, and a bar with no
+ * fill is not a bar. The numbers print either way; this keeps the picture. */
+@media print {
+  .stat-bar, .stat-bar > i { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+
+/* A line under a card header that says how the list is ordered. It is a
+ * whole sentence somebody has to read to understand the order the rows are
+ * in, so it is not caption-sized. */
+.card-note { margin: -0.25rem 0 0.5rem; color: var(--muted); }
+
+/* HOW MANY. Beside the "Results" and "Events" headings this span is not a
+ * caption at all - the count is the first thing a search is read for, and
+ * the accessibility guidance for a results page puts the total before the
+ * list rather than in its margin. So it is the page's own text colour,
+ * where the other `.card-meta` spans stay muted. */
+#results-meta, #events-count { color: var(--text); }
+
+/* The activity feed and the latest events: a two-column row (text left,
+ * time right) that folds into one column when there is no room. */
+.list-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.125rem 0.75rem;
+  align-items: baseline;
+}
+.list-about { color: var(--muted); margin: 0; }
+.list-about .chip { margin-right: 0.25rem; }
+
+
+.event-source a { word-break: break-word; }
+
+/* ── Events ───────────────────────────────────────────────────────────── */
+
+/* Not a card either, and padded for the same two reasons as .query-form.
+ *
+ * THE LAYOUT IS `.query-groups`, the Query form's - this page is that form
+ * with two groups instead of three. Not a grid of its own with named areas
+ * (look / when / actions): two grids for one shape is how two pages drift
+ * apart - a switch ABOVE its field puts the field a label row lower than
+ * "From" and "To" beside it, and the three controls a reader fills in land
+ * on two lines for no reason anybody can see. The 21 rem floor that keeps a
+ * date input's year readable, and the column count that follows the room
+ * rather than a breakpoint, come from one place instead of two. */
+/* The padding is `.filter-card`'s (app.css), as on every other view. */
+.events-filters { margin-bottom: var(--gap); }
+
+/* THE TWO FIELDS OF THE SWITCH SHARE ONE CELL of the toolbar: only ever one
+ * of them is in the page (the other is `hidden`, so Tab never reaches a
+ * control that does nothing), and `display: contents` lets the one that is
+ * behave as the toolbar's own flex item - measured, and aligned, like every
+ * other field in the row. The second rule is not redundant: `contents`
+ * would otherwise beat the `hidden` attribute's own `display: none`. */
+.events-filters [data-mode-field] { display: contents; }
+.events-filters [data-mode-field][hidden] { display: none; }
+
+
+.event-list { display: grid; gap: 0.75rem; margin: 0; padding: 0; list-style: none; }
+
+.event-card {
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 0.75rem var(--gap);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.25rem 0.75rem;
+}
+.event-card h3 { margin: 0; font-size: 1.0625rem; }
+.event-when {
+  grid-row: 1 / 3;
+  grid-column: 2;
+  text-align: right;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.event-when .event-undated { font-style: italic; }
+.event-description { grid-column: 1 / -1; margin: 0; }
+.event-entities { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 0.375rem; align-items: center; }
+.event-entities .entities-label { color: var(--muted); }
+.event-meta { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; color: var(--muted); }
+
+/* ── Query ────────────────────────────────────────────────────────────── */
+
+/* THE FORM IS ONE FRAME, AND THE FIELDSETS INSIDE IT ARE NONE.
+ *
+ * A card holding three bordered fieldsets holding bordered fields is three
+ * frames deep for one question. Taking all three away goes one step too
+ * far: with no edge at all the form has no visible end, and the button that
+ * sends it reads as stranded on the page rather than as the end of the
+ * thing above it.
+ *
+ * So there is one frame, the OUTER one: `.filter-card` (app.css) on the
+ * form, and the fieldsets inside it borderless. What separates Where from
+ * What from When is the legend and the gap, which is what a person reads
+ * anyway.
+ *
+ * The padding is the frame's, so this rule sets none - two paddings, one
+ * inside the other, would put the first field a gap and a half in from the
+ * edge and stop it lining up with the Results card below. The column count
+ * of `.query-groups` is worked out from the width the frame leaves, which
+ * is what it is measured against. */
+.query-form { margin-bottom: var(--gap); }
+
+/* THREE COLUMNS ONLY WHILE THREE COLUMNS FIT.
+ *
+ * `repeat(3, minmax(0, 1fr))` behind a `min-width: 64rem` breakpoint gave
+ * each group 309 px at exactly 1024x768 - the second viewport this
+ * dashboard is checked at - and at that width the form stops working:
+ *
+ *   the address field is 275 px, its suggestion list is as wide as the
+ *   field, and "Springfield, Illinois, USA" then wrapped to ONE CHARACTER
+ *   PER LINE: 141 px per row, three rows filling the popup and scrolling
+ *   past the bottom of the screen. The list was unusable, and it is the
+ *   only way to a place name the archive actually holds.
+ *
+ *   the two date inputs came out 131 px, and Chromium draws the year behind
+ *   the picker icon at that width: the fields read "01/01/202".
+ *
+ * Both are one fault - a column narrower than the thing inside it - so the
+ * count of columns follows the room instead of a breakpoint. 21rem (336 px)
+ * is measured, not guessed: it is where an address suggestion stays on one
+ * line and a date input keeps its year. `auto-fit` then gives three columns
+ * at 1440, two of 471 px at 1024, one on a phone - and never a fourth of a
+ * column that cannot hold its own contents. `min(100%, …)` keeps the track
+ * from growing wider than the form on the narrowest screens. */
+.query-groups {
+  display: grid;
+  gap: var(--gap);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 21rem), 1fr));
+  align-items: start;
+}
+.query-group { display: flex; flex-direction: column; gap: 0.75rem; }
+.query-group legend { font-size: 1.0625rem; }
+
+/* THE 4 PX A TYPEAHEAD DOES NOT GET FROM `.field`.
+ *
+ * The macro emits `class="typeahead field"`, and `.field` is a flex column
+ * with a 0.25 rem gap under its label (app.css) - that gap is what puts a
+ * labelled control on the control baseline. `.typeahead` says
+ * `display: inline-block` (typeahead.css, same specificity and loaded
+ * later, so it wins), which switches the flex column off and the gap with
+ * it: the address input sat 4 px above the chip field and the two date
+ * fields beside it, which is half of "the inputs are still not on one
+ * line". The other half was the chip field's own height (app.css, "an
+ * input inside an input").
+ *
+ * The Map (`.map-toolbar > *`) and Diagrams (`.diagrams-search-row >
+ * .typeahead > .field-label`) stylesheets each patch the same fault in
+ * their own view; this is the third. It belongs in the component - one
+ * `.typeahead.field { display: flex; flex-direction: column; }` in app.css
+ * would end all three - and that is a change to a file three views are
+ * being rebuilt in at once, so it is written down here rather than done
+ * halfway. */
+.query-form .typeahead.field { display: flex; flex-direction: column; }
+
+/* The chosen "where", spelled out in words under the field: with two ways
+ * to say it, the page has to say which one is in force. */
+.query-where { margin: 0; font-weight: 500; }
+.query-where .muted { font-weight: 400; }
+
+.place-choices { display: flex; flex-direction: column; gap: 0.25rem; }
+/* A flex row eats the space between its items - the label read
+ * "Springfield - Illinois, USA- 1 location" - so the gap does the spacing,
+ * and the count wraps under the name instead of into a second column when
+ * the name is long. */
+.place-choices .radio {
+  min-height: var(--control-h);
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius);
+  flex-wrap: wrap;
+  gap: 0.125rem 0.375rem;
+}
+.place-choices .radio:hover { background: var(--accent-tint); }
+/* The label is a flex row, and a flex item shrinks: without this the radio
+ * is squeezed to 15 px wide and stops being a 24 px target. */
+.place-choices .radio input[type="radio"] { flex: 0 0 auto; width: 1.5rem; height: 1.5rem; }
+.place-choices .place-count { color: var(--muted); }
+
+.query-point summary { cursor: pointer; min-height: 2rem; padding: 0.25rem 0; font-weight: 500; }
+.query-point[open] summary { margin-bottom: 0.5rem; }
+.query-point .row { align-items: end; }
+.coord-field { flex: 1 1 8rem; }
+
+/* Slider and number are one value: they sit side by side and each is wide
+ * enough to use on its own (a slider is hard for a shaky hand, a number
+ * field is hard on a phone - so both, always). */
+.distance-row { display: flex; align-items: center; gap: 0.75rem; }
+.distance-row input[type="range"] { flex: 1 1 8rem; min-width: 6rem; }
+.distance-row input[type="number"] { flex: 0 0 6rem; }
+
+
+.query-layout { align-items: start; }
+
+.results { min-width: 0; }
+.results-group { margin: 0 0 var(--gap); }
+.results-group:last-child { margin-bottom: 0; }
+.results-group h3 { margin: 0 0 0.5rem; font-size: 1.0625rem; }
+.results-list { display: grid; gap: 0.75rem; margin: 0; padding: 0; list-style: none; }
+
+.result {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  padding: 0.75rem var(--gap);
+  background: var(--surface);
+}
+.result-title { margin: 0 0 0.25rem; font-size: 1.0625rem; }
+.result-body { margin: 0 0 0.25rem; }
+.result-meta { display: flex; flex-wrap: wrap; gap: 0.375rem 1rem; color: var(--muted); }
+.result-meta a { word-break: break-word; }
+
+/* ── The mini-map ─────────────────────────────────────────────────────── */
+
+.minimap-card { min-width: 0; }
+/* `position: relative; z-index: 0` is not decoration - it is what keeps the
+ * map INSIDE its card.
+ *
+ * Leaflet stacks its panes from z-index 400 (tiles) to 800 (popups). With no
+ * z-index on the container those numbers join the ROOT stacking context and
+ * outrank everything the page paints on top of the map - an error toast
+ * drawn BEHIND the map card leaves the reader with "the date r…" and no
+ * way to see the rest. (app.css lifts `.toasts` to 1000, above Leaflet's
+ * highest pane; this is the braces, and that is the belt.) No test would
+ * catch it: the toast still answers elementFromPoint, so it is covered in
+ * paint order only. `z-index: 0` gives the container a stacking context
+ * of its own, and 400..800 then only mean something within it. */
+.minimap {
+  position: relative;
+  z-index: 0;
+  height: 22rem;
+  min-height: 16rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.minimap-empty { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--muted); padding: 1rem; text-align: center; }
+.minimap-caption { color: var(--muted); margin: 0.5rem 0 0; }
+
+/* The map's text alternative: the same places as a list, always visible.
+ * A map that cannot be seen is not a map; the list is the content. */
+.minimap-places { margin: 0.5rem 0 0; padding: 0; list-style: none; }
+.minimap-places li { padding: 0.25rem 0; border-top: 1px solid var(--line-soft); }
+.minimap-places li:first-child { border-top: 0; }
+.minimap-places .place-address { color: var(--muted); }
+
+/* The enlarged map inside the dialog fills what the dialog gives it, and the
+ * SAME list of places comes with it. While the dialog has focus the page
+ * behind it is unreachable, so a copy of the map's text alternative that
+ * stays out there is no alternative at all: the enlarged map would be the
+ * only way to the places. The map keeps its 20 rem and the list flows under
+ * it - `.dialog-body` is the thing that scrolls. */
+.map-dialog { display: flex; flex-direction: column; gap: 0.5rem; height: 100%; min-height: 24rem; }
+.map-dialog .minimap { flex: 1 1 auto; height: auto; min-height: 20rem; }
+.map-dialog .minimap-places { flex: 0 0 auto; }
+
+/* Leaflet draws its own controls; these two only make them meet the
+ * dashboard's contrast and target sizes. */
+.leaflet-container { font: inherit; }
+.leaflet-bar a {
+  min-width: 34px;
+  min-height: 34px;
+  line-height: 34px;
+  color: var(--text);
+}
+.leaflet-bar a:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.leaflet-popup-content { margin: 0.625rem 0.75rem; }
+
+/* ONE TOOLTIP SHAPE FOR EVERY MAP IN THE PRODUCT.
+ *
+ * It lived in css/map.css, which only the Map view loads - so the same pin,
+ * drawn on the Diagrams map out of the same module, would have had the Map
+ * view's hover text in Leaflet's own light grey on white. The pins moved here
+ * for that reason (.map-pin) and so does what they say.
+ *
+ * Three callers, one shape: the Map view's pins, the Diagrams map's pins, and
+ * the sentence over a patch of heat on either heat field (heatmap.js,
+ * minimap.js).
+ */
+.map-tip.leaflet-tooltip {
+  padding: 0.3125rem 0.5rem;
+  /* `max-content` with a ceiling: a tooltip is absolutely positioned, so
+   * shrink-to-fit picks its MIN-content width once `white-space` is normal -
+   * "Apple Inc." became a column one word wide. This takes the natural width
+   * of the longer line and wraps only past 18 rem. */
+  width: max-content;
+  max-width: 18rem;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow, 0 2px 8px rgb(0 0 0 / 0.15));
+  font-size: 0.875rem;
+  line-height: 1.3;
+  white-space: normal;
+}
+.map-tip.leaflet-tooltip-top::before { border-top-color: var(--line); }
+.map-tip .map-tip-body { display: grid; gap: 0.0625rem; }
+.map-tip .map-tip-name { font-weight: 600; }
+.map-tip .map-tip-where { color: var(--muted); font-size: 0.8125rem; }
+
+.leaflet-popup-content .popup-title { font-weight: 650; display: block; }
+
+/* THE TWO SENTENCES OF A CONNECTION, one line each (static/js/minimap.js).
+ * The width is the popup's own cap; past it the name is cut and the whole
+ * sentence is on the title, rather than the sentence folding onto a second
+ * line where "is a Ownership of" ends up under the names it ties. */
+.leaflet-popup-content .popup-lines { max-width: 34rem; }
+.leaflet-popup-content .popup-line {
+  font-weight: 650;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.leaflet-popup-content .popup-address { color: var(--muted); }
+
+/* ── Target sizes on these three views ────────────────────────────────── */
+/*
+ * WCAG 2.5.8 wants 24 px in both directions for anything that is clicked.
+ * Two kinds of link appear on these pages:
+ *
+ *   a TAG or a CHIP is a control that happens to be a link ("Product
+ *   announcement", "Apple Inc.") and gets the full 24 px here;
+ *
+ *   a link inside a sentence ("Source: news.example.com") falls under the
+ *   standard's inline exception - it cannot be made taller without pushing
+ *   the line apart - so it gets vertical padding instead: the text does not
+ *   move, the hit box grows to 24 px.
+ */
+.list-title a.tag,
+.event-card h3 a.tag,
+.tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+}
+
+.list-title a:not(.tag),
+.list-sub a,
+.list-about a:not(.chip),
+.event-meta a,
+.event-description a,
+.result-title a,
+.result-meta a:not(.chip),
+.minimap-places a {
+  padding-block: 3px;
+}
+
+/* "All events" in a card header is a link people aim at, not prose. */
+.card-header a.card-meta {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+}
+
+/* The tick box next to "Every word must appear" is a target of its own, and
+ * app.css sizes it for a form row rather than for a finger. */
+.query-form .check input[type="checkbox"] {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+/* Leaflet's attribution: its links are its own blue on our grey (4.3:1,
+ * just under the 4.5 the rest of the page holds to), and its 12 px is the
+ * one place on these views that stays under the 16 px floor. It is a credit
+ * line the tile licence requires, not content anybody came to read, and at
+ * 16 px it becomes a two-line grey band across the bottom of a 22 rem map.
+ * 14 px with the page's own text colour is the compromise; the places
+ * themselves are in the list under the map, at full size. */
+.leaflet-control-attribution,
+.leaflet-control-attribution a {
+  color: var(--text);
+  font-size: 0.875rem;
+}
+.leaflet-control-attribution a {
+  color: var(--accent);
+  padding-block: 4px;
+}
+
+.events-filters .query-actions { margin-top: 0; }
+
+/* THE PRESETS SIT UNDER THE DATES THEY SET, right-aligned as a GROUP - so
+ * the row ends where the "To" field above it ends, and the four buttons
+ * read as one thing belonging to those two fields rather than as a row
+ * starting from the left margin of the form.
+ *
+ * "Any date" is last inside the group: it is the way OUT of the presets,
+ * not a fourth period, and the difference between "another choice" and
+ * "undo the choice" is what a reader needs to see before pressing. It was
+ * pushed to the far end on its own for a moment, which separated it from
+ * the group it belongs to - the group moves, not the button. */
+.preset-row { justify-content: flex-end; }
+
+/* THE HALF OF "WHERE" THAT IS ON THE PAGE behaves as the toolbar's own
+ * fields - the wrapper is only there to switch the two halves, and a block
+ * between the toolbar and its fields put them on a line of their own under
+ * the switch instead of beside it. Same shape as the Events mode fields,
+ * and the second rule is not redundant: `contents` would otherwise beat the
+ * `hidden` attribute's own `display: none`. */
+.query-form [data-where-field] { display: contents; }
+.query-form [data-where-field][hidden] { display: none; }
+
+/* THREE LINES OF SUMMARY, and "Show more" for the rest of one.
+ *
+ * A whole extraction summary is several hundred characters and sometimes a
+ * thousand; twenty of them down a page is a wall between the reader and the
+ * next heading. `-webkit-line-clamp` cuts by LINES, so the cut follows the
+ * width the text actually got rather than a guessed character count, and
+ * the button is only shown when something is behind it (query.js measures
+ * scrollHeight against clientHeight after layout).
+ *
+ * Print takes the whole thing: paper has no "show more". */
+.result-body.is-clamped {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.result-more { padding-inline: 0; margin-top: 0.125rem; }
+@media print {
+  .result-body.is-clamped { display: block; overflow: visible; }
+  .result-more { display: none; }
+}
+
+/* The query row takes the FIRST column of the row under the groups, so it
+ * is level with the bottom of the tallest of them rather than on a line of
+ * its own below everything. `align-self: start` keeps it at the top of that
+ * row - a button that floats down the slack of a taller column beside it
+ * stops reading as the other half of the fields above it. */
+.query-groups > .query-actions[data-search-actions] {
+  grid-column: 1;
+  align-self: start;
+  margin-top: 0;
+}
+
+/* TWO ROWS OF GROUPS, PLACED - not four boxes falling where auto-placement
+ * drops them.
+ *
+ * With a fourth group the automatic flow put "What to find" in the third
+ * track of the first row and pushed "When" onto a row of its own, which left
+ * two thirds of that second row empty: a hole the width of the form between
+ * the dates and nothing at all, and the Search button a further row below
+ * that. It read as a form that had come apart.
+ *
+ * So the rows are said out loud. The first is the question - the place, and
+ * the words to look for, which takes the rest of the width because a list of
+ * terms is the one field here that grows. The second is what to do with it:
+ * which kind of object to return, and between which dates. The buttons are
+ * the third, under the kind they act on.
+ *
+ * ONLY WHERE THERE IS ROOM FOR TWO TRACKS. Below that the grid is a single
+ * column, placement of any kind would invent a second one, and source order
+ * is already the right order: place, words, kind, dates, Search. 45rem is
+ * two 21rem tracks plus the gap and the form's own padding - the same
+ * measured number the track size above is built on, not a device width. */
+@media (min-width: 45rem) {
+  /* TWO COLUMNS, FOUR GROUPS, TWO ROWS - and every group one width.
+   *
+   * Three tracks was right for three groups and wrong for four: the fourth
+   * fell to a row of its own, two thirds of that row stood empty, and the
+   * four date presets wrapped two and two inside a track too narrow for
+   * them. Two tracks give a 2x2 block with nothing left over, the presets
+   * fit on one line under the dates they set, and the groups are still what
+   * they were asked to be - one width, whichever row they are on
+   * (tests/ui/test_equal_rows.py measures exactly that).
+   *
+   * The floor is the same 21rem a track has to be for an address suggestion
+   * to stay on one line and a date input to keep its year; two of them plus
+   * the gap and the frame's padding is where this rule starts. */
+  .query-groups { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* ── What to find, in the Query form ──────────────────────────────────────
+ *
+ * Seven radio buttons in a wrapping row rather than a column: the group sits
+ * in the same grid cell as the term chips and the dates, and seven rows would
+ * make that cell twice the height of the two beside it - which pushes the
+ * results below the fold on the screen this dashboard is laid out for.
+ *
+ * They wrap rather than shrink. A label that has been cut is a choice nobody
+ * can make, and "Market Insights" is the longest thing on this page for a
+ * reason: it is what the archive calls those rows everywhere else.
+ */
+.kind-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+}
+
+.kind-choices .check { margin: 0; }
+
+
+/* ── What this is about ───────────────────────────────────────────────────
+ *
+ * The list of subjects over the Results panel: what the answer is about, and
+ * a tick each. It is a card like the answer below it, because it IS an
+ * answer - the first half of one - and not a second form.
+ *
+ * A HEIGHT, AND A SCROLL INSIDE IT. Three hundred rows above the results
+ * would push them off the screen and make the list a page of its own; twenty
+ * rows of it is enough to see the ones worth unticking, since the order is
+ * "how much of the answer each one is". The scroll is on the wrapper the
+ * table already sits in, so nothing new can clip a suggestion list
+ * (app.css says why that matters).
+ */
+.about-panel { margin-bottom: var(--gap); }
+.about-panel .table-scroll { max-height: 22rem; overflow-y: auto; }
+.about-filters { margin-bottom: 0.5rem; }
+.about-filters .field { flex: 1 1 14rem; max-width: 22rem; }
+.about-table { width: 100%; }
+.about-table th.about-tick, .about-table td.about-tick { width: 3.5rem; text-align: center; }
+/* THE NAME AND THE TYPE ARE BUTTONS OVER THEIR WHOLE GROUP, and they have
+ * to look like it: the same underlined, tintable text button the drilldown
+ * tables use for a value (drilldown.css: .cell-button), left-aligned because
+ * these are words and not numbers. 24 px tall is the WCAG 2.5.8 floor and
+ * the row padding adds the rest. */
+.about-group {
+  min-height: 1.75rem;
+  padding: 0 0.375rem;
+  margin-left: -0.375rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  cursor: pointer;
+  max-width: 100%;
+}
+.about-group:hover { background: var(--accent-tint); border-color: var(--accent); }
+.about-table .about-name .about-group { font-weight: 500; }
+.about-table .about-type .about-group { color: var(--muted); }
+
+/* THE WHOLE ROW IS THE SINGLE TICK. Hunting a 20 px box across a wide table
+ * is what this spares; the two buttons inside it stop the click before it
+ * gets here, so a name press is never also a row press. */
+/* The press sits under the list, with the line that says what it will do
+ * beside it - the same shape as the Search row under the form. */
+.about-actions { margin-top: 0.75rem; align-items: center; }
+.about-actions .field-help { margin: 0; }
+
+.about-row { cursor: pointer; }
+.about-row:hover { background: var(--surface-2); }
+
+/* A ROW THAT IS OUT SAYS SO WITHOUT GOING AWAY. Struck through and dimmed,
+ * still in its place: the way back to it is the same tick, and a row that
+ * vanished when it was unticked would be a decision nobody could undo
+ * without starting again. Not colour alone - the line through it is what
+ * carries the state where colour cannot. */
+.about-table tr.is-left-out .about-name .about-group,
+.about-table tr.is-left-out .about-type .about-group,
+.about-table tr.is-left-out .num {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.about-table input[type="checkbox"] { width: 20px; height: 20px; }
+
+/* The count and the "per page" chooser, together at the right of the
+ * Results heading: both are about the list under them, and a chooser on a
+ * line of its own would read as a filter rather than as a view setting. */
+.results-head-right { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+.results-per { display: flex; align-items: center; gap: 0.375rem; }
+.results-per-label { color: var(--muted); }
+.results-per select { min-height: 2rem; padding: 0 0.375rem; }
+
+/* ── What is behind a result row ──────────────────────────────────────── */
+
+/* The whole card is the way in, so it has to look like one. Not a border -
+ * the card has one - but the hover and the pointer every other target in
+ * this dashboard carries. */
+.result { cursor: pointer; }
+.result:hover { background: var(--surface-2); }
+.result:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+/* The links inside it are their own targets and keep their own cursor. */
+.result a, .result button { cursor: pointer; }
+
+.detail-body { display: grid; gap: var(--gap); }
+.detail-block h3 { margin: 0 0 0.375rem; font-size: 1.0625rem; }
+/* Label and value side by side while there is room, stacked when there is
+ * not: a description runs to a paragraph and a date to eight characters,
+ * and one column for both wastes the width the long one needs. */
+.detail-facts {
+  display: grid;
+  grid-template-columns: minmax(7rem, max-content) minmax(0, 1fr);
+  gap: 0.25rem 1rem;
+  margin: 0;
+}
+.detail-facts dt { color: var(--muted); }
+.detail-facts dd { margin: 0; overflow-wrap: anywhere; }
+@media (max-width: 34rem) {
+  .detail-facts { grid-template-columns: minmax(0, 1fr); }
+  .detail-facts dd { margin-bottom: 0.5rem; }
+}
+.detail-links { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.5rem 0 0; }
+
+/* The two landing-page charts: shorter than a Diagrams card, because they
+ * share the row with nothing and the page has three blocks under them. */
+/* The two importance cards are flex columns for the same reason every chart
+ * card is: the "nothing to draw" block fills what is left under the title
+ * and centres itself in it (app.css: .chart-empty). */
+[data-importances] { display: flex; flex-direction: column; gap: 0.5rem; }
+
+/* The picture's own height, set by the module from how many bars there are
+ * (static/js/dashboard.js: a horizontal bar chart has one row per category,
+ * so its height is data). The fallback is what the box is before the first
+ * answer arrives - and what the empty state falls back to (app.css). */
+.dash-chart { position: relative; height: var(--chart-h, 14rem); }
+
+/* ══════════════════════════════════════════════════════════════════════
+ *  EVERY MAP IN THIS PRODUCT, and not only the Map view.
+ *
+ *  These two blocks were in map.css, which is loaded by Map, Heatmap and
+ *  Graph - and NOT by Diagrams, whose Connections tab draws the same pins
+ *  and whose Locations tab draws the same heat field. The result was a map
+ *  whose pins came out black (no fill, so the SVG default) and a heat layer
+ *  handed an empty gradient, which draws nothing at all: "80 places" under a
+ *  picture with nothing in it.
+ *
+ *  They live here because views.css is the file every view that has a map
+ *  loads. A shared drawing needs a shared stylesheet.
+ * ══════════════════════════════════════════════════════════════════════ */
+
+/*
+ * A PIN, NOT A DOT, AND ITS TIP IS THE COORDINATE.
+ *
+ * A circle centred on a point is wrong by its own radius: the thing it marks
+ * is under it, so half the time the reader is looking at the wrong side of a
+ * street. A pin says where it means - the tip - and every map anybody has
+ * used says it the same way. map.js gives the icon `iconAnchor: [16, 44]`,
+ * which is the bottom centre of this box, so Leaflet puts the TIP on the
+ * archive's coordinate (tests/ui/test_map_view.py measures the tip, not the
+ * box).
+ *
+ * WHICH PIN IS THE THING I SEARCHED FOR. One icon for both, with the level
+ * only in the text, leaves "which pin is Apple" - a daily question - with
+ * no answer on the picture. Level 0 is the accent colour and
+ * carries a dot in its head; the rest are the page's muted grey. Colour is
+ * not the only carrier: the title, the popup and the list row all say
+ * "searched" as well.
+ *
+ * Every pin has a near-black outline for the same reason the cluster badge
+ * and the connection keylines do - 10.9:1 over ocean tiles, 15.2:1 over
+ * land - so a pin is findable whatever the tile server sends.
+ */
+.map-pin { background: none; border: 0; }
+.map-pin svg { display: block; width: 32px; height: 44px; overflow: visible; }
+.map-pin .pin-body {
+  fill: var(--muted);
+  stroke: var(--text);
+  stroke-width: 2;
+}
+.map-pin .pin-eye { fill: var(--white); }
+.map-pin--searched .pin-body { fill: var(--accent); }
+.map-pin--searched .pin-eye { fill: var(--white); stroke: var(--text); stroke-width: 1.5; }
+/* The focus ring has to be seen on a map tile, so it is drawn with a white
+ * halo under it exactly as app.css does for every other focusable thing. */
+.leaflet-marker-icon.map-pin:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 6px var(--focus-halo);
+}
+
+/*
+ * THE HEAT FIELD'S GRADIENT, WRITTEN DOWN ONCE.
+ *
+ * Yellow through orange to red (ColorBrewer YlOrRd, five classes), which is
+ * what a heat map has always meant. It lives here, as tokens, and NOT in
+ * the JavaScript:
+ * heatmap.js reads these five values off the root element, hands them to
+ * leaflet.heat as its gradient AND samples the same gradient for every
+ * swatch in the key. One definition, so the key cannot describe a colour the
+ * canvas never paints.
+ *
+ * The ramp rises in luminance-difference as well as hue (#ffffb2 is a pale
+ * yellow, #bd0026 a dark red), so it survives a greyscale print and a
+ * dichromat's eye - and no reading depends on the colour alone: every square
+ * that matters is a row in the list beside the map with its count in
+ * figures, and a click on the field says the same in words.
+ */
+:root {
+  --heat-0: #ffffb2;
+  --heat-1: #fecc5c;
+  --heat-2: #fd8d3c;
+  --heat-3: #f03b20;
+  --heat-4: #bd0026;
+}

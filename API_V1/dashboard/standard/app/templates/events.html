@@ -1,0 +1,164 @@
+{#- Events: what happened, by the entity it is about or by its type.
+
+    Not a type dropdown with hard-coded values and a free-text box that
+    searches the description. Both would be wrong: the types are whatever
+    the extraction wrote (and they are translated), and what people
+    actually ask is "what happened around this company".
+
+    So: one switch with two ways to ask, each with the suggestion list that
+    fits it (/api/suggest/entity_or_bucket, /api/suggest/event_type), a date range
+    with presets, and cards that show the entities as links. The answer
+    comes from GET /api/events (routers/api_events.py), which resolves an
+    entity term through app/scope.py - a BUCKET name therefore finds every
+    member, in every language of the project.
+
+    Both fields exist in the markup and the inactive one is `hidden`, so
+    switching back and forth never loses what was typed and Tab never
+    reaches a control that does nothing.
+-#}
+{% extends "_layout.html" %}
+{% from "_macros.html" import typeahead, search_actions %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ static('css/views.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Events</h1>
+  <details class="page-about">
+    <summary>About this page</summary>
+    <div class="page-about-body">
+      <p class="page-purpose">What happened, by the entity it is about or by its type. Newest first, by the date the event itself carries.</p>
+      <p>A bucket name finds every member of the bucket.</p>
+      <p>A date preset sets the start and leaves the end open, so an event announced for next month stays visible.</p>
+    </div>
+  </details>
+</div>
+
+<form class="filter-card events-filters query-form" id="events-form" novalidate>
+  {#- THE SAME SHAPE AS THE QUERY PAGE, and the same switch as every other
+      view. It was its own thing in both respects: a label reading "Look up
+      events" over a switch of "by entity" / "by type", stacked ABOVE the
+      field, inside a bare div rather than a named group.
+
+      Two things came of that. The wording was this page's alone - every
+      other view calls the same control "Search by" and names its halves
+      after what they search. And the switch sitting above the field pushed
+      the field a label-row lower than "From" and "To" beside it, so the
+      three controls a reader fills in were on two different lines for no
+      reason anybody could see.
+
+      Now: two groups side by side, as on the Query page, each with a
+      legend, each a toolbar whose label row is the same height - so the
+      entity field and the two dates sit on one line. -#}
+  <div class="query-groups">
+    <fieldset class="query-group">
+      <legend>What</legend>
+      <div class="toolbar">
+        <div class="field field--fixed axis-field">
+          <span class="field-label" id="mode-label">Search by</span>
+          <div class="segmented" role="group" aria-labelledby="mode-label">
+            <button type="button" class="button button--secondary" data-mode="entity"
+                    aria-pressed="true" title="One thing: an entity or a bucket">Entity</button>
+            <button type="button" class="button button--secondary" data-mode="type"
+                    aria-pressed="false" title="A whole class: an event type">Event type</button>
+          </div>
+        </div>
+
+        {#- entity_or_bucket, not entity: the field is labelled "Entity or
+            bucket", so it has to be able to OFFER a bucket. With the entity
+            list alone the only discoverable buckets were the ones that
+            happen to share a name with an entity, and a bucket called
+            "Suppliers" could only be found by guessing it. Buckets come
+            first, their hint begins with the word "bucket", and the
+            entities a bucket holds are IN that row rather than offered
+            beside it (routers/api_suggest.py: BUCKETED_KINDS).
+
+            limit=8, not the macro's 12: with the "- every entity -" reset on
+            top, twelve suggestions make thirteen rows, and NN/g puts the
+            useful maximum at ten - past that a list stops being scanned and
+            starts being read. -#}
+        <div data-mode-field="entity">
+          {{ typeahead("entity", label="Entity or bucket",
+                       suggest_url="/api/suggest/entity_or_bucket",
+                       placeholder="Every entity",
+                       empty_label="- every entity -",
+                       limit=8) }}
+        </div>
+        <div data-mode-field="type" hidden>
+          {{ typeahead("type", label="Event type",
+                       suggest_url="/api/suggest/event_type",
+                       placeholder="Every type",
+                       empty_label="- every type -",
+                       limit=8) }}
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset class="query-group">
+    <legend>When</legend>
+    {#- A TOOLBAR, measured like every other row of controls in the product
+        (tests/ui/test_toolbar_alignment.py). -#}
+    <div class="toolbar">
+      <div class="field coord-field">
+        <label class="field-label" for="ev-from">From</label>
+        <input type="date" id="ev-from" name="date_from">
+      </div>
+      <div class="field coord-field">
+        <label class="field-label" for="ev-to">To</label>
+        <input type="date" id="ev-to" name="date_to">
+      </div>
+    </div>
+    {#- Toggle buttons, not links: exactly one of them is in force at a
+        time and `aria-pressed` is what says which. events.js sets it from
+        the date fields, so a reloaded URL shows its preset as pressed. -#}
+    <div class="toolbar preset-row" role="group" aria-label="Date presets">
+      <button type="button" class="button button--quiet" data-preset="7" aria-pressed="false">From 7 days ago</button>
+      <button type="button" class="button button--quiet" data-preset="30" aria-pressed="false">From 30 days ago</button>
+      <button type="button" class="button button--quiet" data-preset="365" aria-pressed="false">From a year ago</button>
+      {#- "Any date" is the way OUT of the presets and sits at the end of
+          them; the whole group is right-aligned under the dates it sets, so
+          it ends where the "To" field ends. -#}
+      <button type="button" class="button button--quiet preset-reset"
+              data-preset="" aria-pressed="false">Any date</button>
+    </div>
+    {#- What a preset does is in the About disclosure; the buttons say
+        "From …", which is the same sentence in two words. -#}
+    </fieldset>
+    {#- INSIDE THE GRID, in the first column of the next row: with room
+        for the groups side by side the button then sits level with the
+        bottom of the tallest one instead of on a line of its own below
+        everything, and the form is one row shorter. On a narrow screen
+        the grid is one column and it falls under the fields, which is
+        where it belongs there. -#}
+    {{ search_actions(status_id="events-status") }}
+  </div>
+
+</form>
+
+<section class="card" aria-labelledby="events-result-title">
+  <div class="card-header">
+    <h2 id="events-result-title" class="card-title">Events</h2>
+    <span class="card-meta" id="events-count"></span>
+  </div>
+  <p class="notice notice--warn notice--tight" id="events-resolved" hidden></p>
+  <ul class="event-list" id="event-list" aria-busy="false">
+    <li class="loading">Loading events…</li>
+  </ul>
+  {#- Said once for the list, not once per card: this archive's documents
+      have no names of their own (sources.text_name is an id in every row),
+      so a name shown here was read off the address. events.js unhides it
+      only when a card on the page actually carries a derived name. -#}
+  <p class="card-meta" id="events-derived-note" data-derived-note hidden></p>
+  <nav class="pager" id="events-pager" aria-label="Pages of events" hidden>
+    <button type="button" class="button button--secondary" data-page-prev>Previous</button>
+    <span class="pager-info" id="events-page-info" aria-live="polite"></span>
+    <button type="button" class="button button--secondary" data-page-next>Next</button>
+  </nav>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="{{ static('js/events.js') }}"></script>
+{% endblock %}

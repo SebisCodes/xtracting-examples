@@ -1,0 +1,246 @@
+{#- The Watchlist: every list page the crawler watches.
+
+    WHY "WATCHED PAGE" AND NOT "SOURCE". The archive calls an archived
+    document a source, and so do the Dashboard, Diagrams, Events and
+    Query. These rows are crawler configuration - a completely different
+    thing - and while both were called Sources a customer who read
+    "Sources 5" on the Dashboard and pressed Sources in the top bar
+    landed here.
+
+    ONE CARD PER WATCHED PAGE, NOT A ROW OF A TABLE. One of them carries seven
+    numbers, three words about how it collects, a verdict from the site's
+    robots.txt and a tick box that starts a crawl of somebody else's
+    server. As a table that is eleven columns, and on a 1024 px screen the
+    eleventh falls off the right edge - which is where the tick box would
+    have been. The card puts the name and the address on the left, the
+    switch on the right, and the numbers underneath in their own line.
+
+    NOTHING ON THIS PAGE MOVES ON ITS OWN. The crawler pill and the problem
+    count are fetched once with the list. A page that refreshes under the
+    reader's hands moves the switch they were about to press - and the
+    consequence of pressing the wrong one here is a crawl.
+
+    WHAT THE CRAWLER BEING OFFLINE MEANS IS SAID ONCE, in the notice below
+    the heading: pages can be added, edited and tested from here whatever
+    the crawler is doing - only the scheduled crawling needs it.
+-#}
+{% extends "_layout.html" %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ static('css/sources.css') }}">
+{% endblock %}
+
+{% from "_macros.html" import search_actions %}
+{% block content %}
+<div class="sources-top">
+  <div class="page-header">
+    <h1>Watchlist</h1>
+    <details class="page-about">
+      <summary>About this page</summary>
+      <div class="page-about-body">
+        <p class="page-purpose">The pages the crawler watches: what each one collects, and what has reached the archive.</p>
+        <p>Nothing on this page moves on its own, and nothing is fetched until you open a watched page and press <em>Test this configuration</em>.</p>
+      </div>
+    </details>
+  </div>
+
+  <div class="crawler-state">
+    {#- Both carry their word, so the colour repeats the state instead of
+        carrying it. The link is a link even at zero, because "nothing went
+        wrong" is worth being able to check. -#}
+    <span class="pill pill--off" id="crawler-pill" data-online="unknown">
+      <span class="pill-dot" aria-hidden="true">●</span><span id="crawler-pill-text">Asking the crawler…</span>
+    </span>
+    <a class="problems-link" id="problems-link" href="/logs?range=day&amp;severity=problem" data-problems="0">Log</a>
+  </div>
+</div>
+
+{#- ── THE CRAWLER'S OWN SWITCH ──────────────────────────────────────────
+
+    One switch over the whole watchlist: scheduled crawling on, or off. It is
+    a `dashboard.settings` row the crawler reads every tick, so the person who
+    has to stop a crawl in a hurry does it here rather than in a shell.
+
+    IT STARTS OFF, and the sentence beside it says why. A freshly installed
+    archive knows nothing about the sites it is pointed at, and a crawler that
+    begins fetching and submitting the moment it is deployed pays for all of
+    that before anybody has looked at one page. The way in is Test on one row,
+    then the next, and then this.
+
+    Above the search rather than inside it: the search narrows what is listed
+    and this governs what the machine does, and a control that stops every
+    crawl does not belong in a row of filters. -#}
+<section class="card crawler-switch" id="crawler-switch" aria-labelledby="crawler-switch-title">
+  <div class="crawler-switch-main">
+    <h2 id="crawler-switch-title" class="card-title">Scheduled crawling</h2>
+    <p class="crawler-switch-said" id="crawler-switch-said">Reading the switch…</p>
+  </div>
+  <div class="crawler-switch-action">
+    <label class="enable-check">
+      <input type="checkbox" id="crawler-running" disabled>
+      <span id="crawler-running-label">Off</span>
+    </label>
+  </div>
+</section>
+
+{#- Shown only while no crawler has reported in. It explains the one thing
+    that stops working, and says that everything else on this page does
+    not depend on it. -#}
+<div class="notice notice--warn" id="crawler-offline-note" hidden>
+  <p><strong>No crawler is running.</strong> Watched pages can be added, changed and tested from here at any time - the dashboard runs a test itself. Only the scheduled crawling waits for the crawler service; start it in <code>API_V1/crawler</code> and this line goes away.</p>
+</div>
+
+{#- THE SEARCH BOX BELONGS TO THIS VIEW, and it looks for what this view
+    shows: the name somebody gave the page, the host, the address of the
+    list page and the key it is pinned to. NOT the project's name: that lives
+    in the crawler's registry and would need a join, so the card shows it and
+    the search does not - a limitation worth knowing rather than hiding.
+    Not a typeahead - a suggestion list needs
+    something to suggest from, and the whole list is already on the screen
+    below; what a reader with forty of them needs is "show me the ones on
+    homegate.ch", which is a substring, not a name they can be offered.
+
+    It is a real form with a button, like the Log's: nothing on this page
+    reloads while somebody is still typing, because the control they are
+    about to press is a tick box that starts a crawl. The term lives in the
+    URL (state.js), so the search can be sent to a colleague and the Export
+    menu writes the file the reader is looking at. -#}
+<form class="filter-card toolbar sources-search" id="sources-search" novalidate>
+  <div class="field">
+    <label class="field-label" for="sources-q">Search</label>
+    <input type="search" id="sources-q" name="q" autocomplete="off"
+           placeholder="name, host or address" aria-describedby="sources-q-help">
+  </div>
+  <p class="field-help" id="sources-q-help">The name, the host, the address of the list page and the key are searched.</p>
+  {#- "Show every watched page" travels with the query button: sources.js
+      shows it only while a search is on, so it is both the way back and the
+      sign that something is being left out. -#}
+  {{ search_actions(clear_id="sources-search-clear", clear="custom") }}
+</form>
+
+<div class="sources-actions">
+  <a class="button" href="/sources/new">Add a watched page</a>
+  {#- Not in the top bar: eleven buttons already fill 974 of the 1024 px this
+      dashboard is laid out for, and a twelfth wraps the bar onto a second row
+      (see VIEWS in routers/pages.py). Here is where a project is a question
+      anybody is asking anyway. -#}
+  <a class="button button--secondary" href="/projects">Projects</a>
+  <span class="card-meta" id="sources-count" aria-live="polite"></span>
+</div>
+
+<ul class="source-list" id="source-list" aria-busy="true">
+  <li class="loading">Loading the watched pages…</li>
+</ul>
+
+<p class="empty" id="sources-empty" hidden>
+  Nothing is watched yet. <strong>Add a watched page</strong> above, give it the address of a list - a search result, a news list, a register - and press <em>Test this configuration</em> before you save it: the test says what the site answers and which links it offers.
+</p>
+
+{#- TWO CAUSES, TWO ANSWERS. "You watch nothing yet" and "your search hides
+    all of them" look identical in an empty list, and only one of them is
+    fixed by adding a page. The button is the way back, next to the
+    sentence that says what is being left out. -#}
+<div class="empty" id="sources-no-match" hidden>
+  <p id="sources-no-match-text"></p>
+  <button type="button" class="button button--secondary" id="sources-no-match-clear">Show every watched page</button>
+</div>
+
+{#- The list could not be fetched. Same shape as the verdict banners in
+    the editor - icon, heading, sentence - and a button that tries again,
+    because "reload the page" is advice a person has to carry out with a
+    control the page did not offer. Colour is the last carrier here, not
+    the first. -#}
+<div class="notice notice--error verdict" id="sources-error" role="status" hidden>
+  <span class="verdict-icon" aria-hidden="true">⛔</span>
+  <p class="verdict-title">The list of watched pages could not be loaded</p>
+  <p class="verdict-text" id="sources-error-text"></p>
+  <div class="verdict-actions">
+    <button type="button" class="button button--secondary" id="sources-retry">Try again</button>
+  </div>
+</div>
+
+{#- The card, cloned per watched page by sources.js. Kept as markup rather than
+    built in JavaScript so the wording, the headings and the ARIA sit in
+    one readable place. -#}
+<template id="source-item-template">
+  <li class="card source-item" data-source>
+    <div class="source-main">
+      <h2 class="source-name">
+        <a data-edit-link href="#"><span data-name></span></a>
+        <span class="source-host" data-host></span>
+      </h2>
+
+      <ul class="source-flags">
+        <li><span class="tag" data-mode></span></li>
+        <li><span class="tag" data-format></span></li>
+        <li><span class="tag" data-engine></span></li>
+        <li><span class="tag" data-key hidden></span></li>
+        <li><span class="pill" data-robots hidden></span></li>
+      </ul>
+
+      <dl class="source-numbers">
+        <div><dt>Accepted last run</dt><dd data-accepted>-</dd></div>
+        <div><dt>New last run</dt><dd data-new>-</dd></div>
+        <div><dt>Submitted</dt><dd data-submitted>-</dd></div>
+        <div><dt>In the archive</dt><dd data-archived>-</dd></div>
+      </dl>
+
+      <p class="source-last-run" data-last-run></p>
+    </div>
+
+    <div class="source-side">
+      <label class="enable-check" data-enable-box>
+        <input type="checkbox" data-enable>
+        <span data-enable-label>Crawl on a schedule</span>
+        {#- WHY THIS MARK IS HERE AND WHY IT IS THIS SMALL.
+            Not a message at the bottom of the screen saying that N watched
+            pages have never been crawled: on a fresh watchlist that is every
+            row, and it is not a fault - it is what "new" looks like. What IS
+            worth saying is that the switch beside
+            it promises something that is not happening: scheduled crawling
+            is off, or no crawler has reported in, so ticking the box changes
+            nothing today.
+            It is drawn INSIDE the label and absolutely positioned (app.css),
+            so a row with the warning is exactly as tall as a row without it.
+            Hidden unless the page says otherwise. -#}
+        <span class="enable-warn" data-enable-warn hidden
+              role="img" aria-label="Scheduled crawling is off">!</span>
+      </label>
+      {#- TEST THIS ONE PAGE, ONCE, WITHOUT SAVING OR SUBMITTING ANYTHING.
+          The editor has it too, but only for the configuration open in
+          front of you; from the list it is the gesture
+          that answers "does this site still answer, and what would it
+          collect" for any row without opening it. Nothing is submitted and
+          nothing is paid for - the dashboard fetches the page itself. -#}
+      {#- THE TICK THAT SAYS IT HAS BEEN TESTED.
+          A test leaves its answer in the line under the card, and that line is
+          rewritten by the next thing that happens to the row - so a minute
+          later nothing on the row says a test ever ran. The tick does, and it
+          is grey rather than green: it reports that the page was fetched, not
+          that what came back was good news. What came back is the pill.
+          Absolutely positioned (sources.css) like the warning beside the tick
+          box, so a row with it is exactly as tall as a row without.
+
+          THE WORD IS ITS OWN ELEMENT because the button is re-labelled from
+          JavaScript - "Testing...", "Queued", back to "Test" - and writing
+          `button.textContent` replaces every child it has. The first press
+          deleted this tick and folded its glyph into the label, which then
+          travelled on as the remembered label: `Test✓`. Only the span
+          below is rewritten now. -#}
+      <button type="button" class="button button--secondary" data-test><span
+          data-test-word>Test</span><span
+          class="test-done" data-tested hidden role="img" aria-label="Tested"
+          title="This page has been tested">&#10003;</span></button>
+      <a class="button button--secondary" data-open href="#">Open</a>
+    </div>
+
+    {#- Filled by sources.js when POST /enable answers 409: the rule text of
+        the site's robots.txt plus what can be done about it. -#}
+    <div class="notice notice--error enable-refusal" data-refusal hidden></div>
+  </li>
+</template>
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="{{ static('js/sources.js') }}"></script>
+{% endblock %}

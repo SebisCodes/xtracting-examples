@@ -1,0 +1,222 @@
+/* ==========================================================================
+ *  Print stylesheet.
+ *
+ *  Loaded with media="print" from _layout.html. What a printout is for:
+ *  the charts, the tables, the map - and one header line saying which
+ *  project, language, period and search they belong to. What it is not
+ *  for: navigation, toolbars, search fields, suggestion lists, backdrops,
+ *  and anything that only makes sense with a mouse.
+ *
+ *  Three rules matter most:
+ *    - `break-inside: avoid` on every card, so a chart is never cut in two
+ *      across a page boundary;
+ *    - no fixed heights and no `overflow: hidden` on the main column, so a
+ *      long table prints in full instead of being clipped at the fold.
+ *      (test_print_stylesheet checks that the charts are unclipped.)
+ *    - a dialog that is OPEN is what the reader is looking at, so its
+ *      contents print and the page behind them does not. The dialog element
+ *      itself never prints: it is in the top layer, out of reach of this
+ *      file, so export.js copies it into the flow of <main> first.
+ *
+ *  The header line is `[data-print-header]`; export.js fills it on
+ *  `beforeprint` (and before a PDF export) from the URL parameters and from
+ *  the period caption the toolbar shows.
+ *
+ *  This file holds what is true of EVERY view. What is true of one view is
+ *  in that view's stylesheet - `@media print` blocks live at the bottom of
+ *  diagrams.css, map.css, logs.css, settings.css and sources.css, next to
+ *  the screen rules they undo.
+ * ========================================================================== */
+
+@page {
+  size: A4;
+  margin: 12mm;
+}
+
+@media print {
+  html, body {
+    background: #fff !important;
+    color: #000 !important;
+    font-size: 11pt;
+  }
+
+  /* Not content: the way around the dashboard, and the controls that change
+   * what it shows. A sheet of paper cannot be navigated or filtered. */
+  nav, .topbar, .toolbar, .tabs, .tabs-row, [role="tablist"], .typeahead-popup,
+  .export-menu, [data-print], [data-export], .no-print,
+  .chips-input, .pager, .pagination, .skip-link, .toast, .toasts,
+  .drilldown-sentinel, .segmented, .mode-switch, .place-choices,
+  /* EVERY QUESTION-ASKING FORM, by the one class they all wear now
+   * (app.css: `.filter-card`). The two names beside it are older and are
+   * kept because they cost nothing and say what they are. */
+  .filter-card, .query-form, .events-filters,
+  /* The triangle is a control; the sentence behind it is not. */
+  .page-about > summary {
+    display: none !important;
+  }
+
+  /* WHAT THE PAGE IS ABOUT PRINTS, EVEN THOUGH IT IS SHUT ON SCREEN.
+   *
+   * On screen the purpose sentence is one press away because a reader who
+   * has been here before does not need it again. On paper there is no
+   * second visit and nothing to press: the sheet has to say what it is a
+   * sheet OF. So the disclosure opens itself for print - `content-visibility`
+   * is how a closed <details> hides its contents in a current browser, and
+   * `display` alone does not reach past it. */
+  .page-about::details-content {
+    content-visibility: visible !important;
+    display: block !important;
+  }
+  .page-about .page-about-body { display: block !important; }
+  .page-about .page-about-body p { margin: 0 0 0.2cm; }
+
+  /* THE SEARCH FORM GOES, THE ANSWER STAYS. What was searched for is in the
+   * header line at the top of the sheet ("Search: battery - near Cupertino,
+   * California, USA"), and how much it found is in the results card itself
+   * ("3 results in Cupertino, California, USA") - so the form would be a
+   * third copy of the same facts, drawn as controls nobody can press. */
+  #results-meta, #events-count { color: #000 !important; }
+
+  /* The header line: hidden on screen (app.css), shown here. */
+  [data-print-header] {
+    display: block !important;
+    font-size: 10pt;
+    color: #333;
+    border-bottom: 1px solid #999;
+    padding-bottom: 4pt;
+    margin-bottom: 8pt;
+  }
+
+  /* Let the main column grow: no sticky, no scroll boxes, no clipping. */
+  main, .layout, .page, .content, .grid, .panel, .card, .chart-card,
+  #graph-root, .map-root, .map-layout, .results, .settings-columns,
+  .table-scroll, .table-scroll-wrap, .log-panel {
+    position: static !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+  }
+
+  main {
+    display: block !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Every multi-column grid becomes one column: two columns of an A4 page
+   * are 85 mm each, and a chart with a legend does not fit in 85 mm. */
+  .grid, .map-layout, .settings-columns, #graph-root, .graph-side, .query-layout {
+    display: block !important;
+  }
+
+  /* Cards keep their content on one page. */
+  .card, .chart-card, .event-card, .result, .legend, table, figure {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    border: 1px solid #bbb;
+    margin-bottom: 8pt;
+  }
+
+  /* Charts and maps: keep the drawn size, force the colours to print. */
+  canvas, svg, .leaflet-container, img {
+    max-width: 100% !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .leaflet-container {
+    height: 120mm !important;
+    width: 100% !important;
+  }
+  .leaflet-control-container { display: none !important; }
+
+  /* The graph is one drawing with a viewBox, so it scales to whatever box it
+   * is given; on screen that box is a fraction of the window height, which
+   * on paper is nothing at all. It gets a printed size instead, and the
+   * legend and the detail panel follow underneath it. */
+  .graph-canvas {
+    height: 150mm !important;
+    break-inside: avoid;
+  }
+  .graph-canvas svg { height: 100% !important; }
+
+  /* Hidden data tables behind charts are the accessible alternative on
+   * screen and the readable one on paper. */
+  .chart-data-table, table.visually-hidden-print {
+    position: static !important;
+    width: 100% !important;
+    height: auto !important;
+    clip: auto !important;
+    overflow: visible !important;
+    margin: 4pt 0 0 !important;
+    border-collapse: collapse;
+    font-size: 9pt;
+  }
+  .chart-data-table th, .chart-data-table td {
+    border: 1px solid #ccc;
+    padding: 2pt 4pt;
+    text-align: left;
+  }
+
+  /* ── Dialogs ─────────────────────────────────────────────────────────
+   *
+   * The dialog itself never prints. It is in the top layer, where the
+   * browser positions it against the page box whatever this file says, so
+   * it would land over the page behind it and be cut off at the first page
+   * boundary. export.js copies its contents into <main> on `beforeprint`
+   * instead (see "An open dialog on paper" there) and takes the copy out
+   * again afterwards; what is styled here is that copy.
+   *
+   * With a copy present, the page behind the dialog goes: it is inert and
+   * under a backdrop, so it is not what the reader is looking at. The
+   * header line stays - it is what says which project and period the rows
+   * in the dialog belong to. */
+  dialog { display: none !important; }
+  dialog::backdrop { background: transparent !important; display: none !important; }
+
+  body.has-print-dialog main > *:not([data-print-header]):not(.print-dialog-copy),
+  body.has-print-dialog .footer {
+    display: none !important;
+  }
+
+  .print-dialog-copy {
+    display: block !important;
+    border: 1px solid #999;
+    padding: 6pt;
+    /* NOT break-inside: avoid - a drilldown can be two hundred rows, and a
+     * card that may not be broken would be a card printed on one page with
+     * everything past the fold thrown away. Its ROWS avoid breaks instead. */
+    break-inside: auto;
+  }
+  .print-dialog-copy .drilldown-row,
+  .print-dialog-copy tr { break-inside: avoid; }
+  .dialog-close, .dialog-actions, .drilldown-sentinel { display: none !important; }
+  .dialog-body { max-height: none !important; overflow: visible !important; }
+
+  /* Links: show where they go, unless they are just "#" scaffolding. */
+  a { color: #000; text-decoration: none; }
+  a[href^="http"]::after {
+    content: " (" attr(href) ")";
+    font-size: 8pt;
+    color: #444;
+  }
+
+  /* Chips print as plain words, not as buttons. */
+  .chip-remove { display: none !important; }
+  .chip { border: 1px solid #999; padding: 0 4pt; }
+
+  h1, h2, h3 { break-after: avoid; page-break-after: avoid; }
+  thead { display: table-header-group; }
+  tr { break-inside: avoid; page-break-inside: avoid; }
+}
+
+/* Belt and braces for a build that loads this file without media="print":
+ * the header line is hidden on screen by app.css, and the dialog copy by its
+ * own `hidden` attribute, so neither depends on this block running. */
+@media screen {
+  [data-print-header] { display: none; }
+  .print-dialog-copy { display: none !important; }
+}

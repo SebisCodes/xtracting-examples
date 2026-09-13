@@ -1,0 +1,303 @@
+{#- The crawler's log: what went wrong, newest first.
+
+    Four tabs over the same filters, because they answer questions that are
+    asked one after the other:
+
+      Problems   monitoring.scraper_errors - one row per thing that went
+                 wrong, with the sentence a person can act on and the
+                 technical half folded away underneath it.
+      Runs       monitoring.scraper_runs - the history. "Nothing went
+                 wrong" and "nothing ran at all" look identical in the
+                 first tab, and only the second one tells them apart.
+      Crawler    monitoring.service_log - what the crawler DID, step by
+      Collector  step, and the same for the collector. Written only while a
+                 switch in dashboard.settings is on and kept for 24 hours,
+                 because a row per step is two orders of magnitude more
+                 rows than a row per accident and none of them is
+                 interesting tomorrow.
+
+    THE SEVERITY IS NEVER CARRIED BY COLOUR ALONE. Every row has a pill
+    with the word in it (Error / Warning / Test); the colour repeats what
+    the word already says, for the people who see it.
+
+    The filters are real form controls with labels, they are submitted with
+    a button (nothing reloads while somebody is still choosing), and every
+    one of them lives in the URL - so a link to "everything from
+    www.example.ch in the last week" can be sent to a colleague.
+
+    HEIGHT IS THE SCARCE THING HERE. On a 1024x768 screen everything above
+    the first row is chrome, and a log whose first row starts below the
+    fold is a log nobody reads: the filter card is therefore ONE block of
+    controls plus one line of help, the sentence that says what is being
+    shown sits in the panel header next to the count instead of taking a
+    row of its own, and the notice line below the card exists only while
+    there is something to say. That help line is measured: two words more
+    in it wrapped at 1024 px and cost the page a row of the log, which is
+    why it says "the name" where the rest of this view says "the watched
+    page".
+
+    NOTHING ABOVE THE LIST MAY MOVE WHILE IT IS BEING USED. A help line that
+    appears on :focus-within costs the page 30 px the moment a control takes
+    focus - so the FIRST click on a row, a tab or a link below the card is
+    swallowed: on mousedown the field blurs, the card collapses, the target
+    jumps up and the mouseup lands on nothing. The line is therefore in the
+    page at all times, at one line, and it is the price of a row of the log.
+-#}
+{% extends "_layout.html" %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ static('css/logs.css') }}">
+{% endblock %}
+
+{% from "_macros.html" import search_actions, help_icon, help_text %}
+{% block content %}
+<div class="page-header log-page-header">
+  <h1>Log</h1>
+  <details class="page-about">
+    <summary>About this page</summary>
+    <div class="page-about-body">
+      <p class="page-purpose">What the crawler ran into, newest first: which watched page, which site, what happened, and what to do about it.</p>
+      <p>Every filter is kept in the address of this page, so a filtered log can be sent to a colleague.</p>
+    </div>
+  </details>
+</div>
+
+<form class="filter-card log-filters" id="log-filters" novalidate>
+  {#- A TOOLBAR, and marked as one: `.toolbar` is what says "the controls
+      in this row line up", and tests/ui/test_toolbar_alignment.py measures
+      every element of every one of them on every view. The buttons carry no
+      label, so app.css gives their cell the label row as a margin and they
+      sit on the control baseline with the selects. -#}
+  <div class="toolbar log-filter-row">
+    <div class="field">
+      <label class="field-label" for="log-range">Time range</label>
+      <select id="log-range" name="range">
+        <option value="hour">Last hour</option>
+        <option value="day" selected>Last 24 hours</option>
+        <option value="week">Last 7 days</option>
+        <option value="month">Last 30 days</option>
+        <option value="all">Everything kept</option>
+      </select>
+    </div>
+
+    {#- Not on the Collector tab: that service fetches by key and project and
+        never learns which watched page a document came from, so every one of
+        its rows carries an empty source. A select that could only ever empty
+        the list is a trap, and logs.js leaves the value out of the request
+        for that tab as well as hiding the control. -#}
+    <div class="field" data-for-tab="errors runs crawler">
+      <label class="field-label" for="log-source">Watched page</label>
+      <select id="log-source" name="source_id">
+        <option value="">Every watched page</option>
+      </select>
+    </div>
+
+    <div class="field" data-for-tab="errors">
+      <label class="field-label" for="log-kind">What happened</label>
+      <select id="log-kind" name="kind">
+        <option value="">Everything</option>
+      </select>
+    </div>
+
+    <div class="field" data-for-tab="errors">
+      <label class="field-label" for="log-severity">Severity</label>
+      <select id="log-severity" name="severity">
+        <option value="">Every severity</option>
+      </select>
+    </div>
+
+    <div class="field" data-for-tab="runs" hidden>
+      <label class="field-label" for="log-status">Result</label>
+      <select id="log-status" name="status">
+        <option value="">Every result</option>
+      </select>
+    </div>
+
+    <div class="field log-search">
+      {#- THE SENTENCE IS IN THE ⓘ, and this is the one page where that is
+          a saving and not a preference. What the search covers has to be
+          reachable - it is the difference between "nothing matched" and "I
+          searched the wrong column" - but as a permanent line under the row
+          it would cost 24 px plus its gap, and on the Log every pixel above
+          the list is a row of the log (logs.css says so twice). Two whole
+          rows on a 1024x768 screen is what this page is opened for.
+          Nothing is lost: the bubble is a real element with the id the
+          input's aria-describedby points at, so a screen reader hears it
+          exactly as it heard the line; it opens on hover, on a click and
+          from the keyboard; and it prints, because app.css shows every
+          bubble on paper. -#}
+      {#- The ⓘ INSIDE the label, which is the pattern the typeahead and
+          chipinput macros already use: `.toolbar` makes a field label
+          `display: block`, so a button after it starts a second line and
+          the row grows by 26 px - which is the whole saving, spent. -#}
+      <label class="field-label" for="log-q">Search{{ help_icon("log-q", "") }}</label>
+      {#- Short enough to be read whole in the width this field takes on a
+          1440 screen - a longer version ends in "a word from the m". -#}
+      <input type="search" id="log-q" name="q" autocomplete="off"
+             placeholder="host, address or word"
+             aria-describedby="log-q-hint">
+      {%- call help_text("log-q") %}The search covers the message, the name, the host and the address.{% endcall %}
+    </div>
+
+  </div>
+  {#- "Clear filters" travels with the query button: it is the way back from
+      the same question. logs.js shows it only while something is filtered,
+      so it is also the sign that a filter is on. "Clear filters" rather
+      than "Show everything" - it resets the time range to the last 24 hours
+      as well, and a reader coming from "Everything kept" must not be
+      promised more and given less. -#}
+  {{ search_actions(clear_id="log-clear", clear="custom") }}
+</form>
+
+{#- Only ever filled when a filter had to be ignored or a list could not be
+    fetched. Empty and hidden the rest of the time, so it costs no height. -#}
+<p class="notice notice--warn log-notice" id="log-notice" role="status" hidden></p>
+
+<div class="tabs" role="tablist" aria-label="What the log shows">
+  <button type="button" class="tab" role="tab" id="tab-errors"
+          aria-controls="panel-errors" aria-selected="true" data-tab="errors">
+    Problems <span class="tab-count" data-count-for="errors"></span>
+  </button>
+  <button type="button" class="tab" role="tab" id="tab-runs"
+          aria-controls="panel-runs" aria-selected="false" tabindex="-1" data-tab="runs">
+    Runs <span class="tab-count" data-count-for="runs"></span>
+  </button>
+  {#- The two step streams. Empty unless somebody switched them on, which is
+      why both panels carry a sentence naming the switch rather than showing
+      a bare empty table - see logs.js: EMPTY. -#}
+  <button type="button" class="tab" role="tab" id="tab-crawler"
+          aria-controls="panel-crawler" aria-selected="false" tabindex="-1" data-tab="crawler">
+    Crawler <span class="tab-count" data-count-for="crawler"></span>
+  </button>
+  <button type="button" class="tab" role="tab" id="tab-collector"
+          aria-controls="panel-collector" aria-selected="false" tabindex="-1" data-tab="collector">
+    Collector <span class="tab-count" data-count-for="collector"></span>
+  </button>
+</div>
+
+<section class="card log-panel" id="panel-errors" role="tabpanel"
+         aria-labelledby="tab-errors" tabindex="0">
+  <div class="card-header">
+    {#- tabindex="-1" so the pager can put focus here when it has to take
+        it off a button it is about to disable. -#}
+    <h2 class="card-title" id="errors-title" tabindex="-1">Problems</h2>
+    <span class="card-meta" id="errors-count"></span>
+  </div>
+  <ul class="log-list" id="error-list" aria-busy="true">
+    <li class="loading">Loading the log…</li>
+  </ul>
+  <nav class="pager" id="errors-pager" aria-label="Pages of the log" hidden>
+    <button type="button" class="button button--secondary" data-page-prev>Previous</button>
+    <span class="pager-info" id="errors-page-info" aria-live="polite"></span>
+    <button type="button" class="button button--secondary" data-page-next>Next</button>
+  </nav>
+</section>
+
+<section class="card log-panel" id="panel-runs" role="tabpanel"
+         aria-labelledby="tab-runs" tabindex="0" hidden>
+  <div class="card-header">
+    <h2 class="card-title" id="runs-title" tabindex="-1">Runs</h2>
+    <span class="card-meta" id="runs-count"></span>
+  </div>
+  {#- The sentence sits ABOVE the scroll box, not in the table's <caption>:
+      a caption is as wide as the table, and the table can be wider than the
+      card on a 1024 px screen - the last third of the sentence was cut off
+      by the scroll edge. The table keeps a caption for screen readers. -#}
+  {#- ALL SIX NUMBERS ARE NAMED, not two of them. A row reading "3 pages -
+      218 links - 0 accepted - 0 new" is six columns of arithmetic, and a
+      reader who is not told what Links and Accepted count cannot tell "the
+      site changed its layout" from "my rules reject everything" - which is
+      the one thing this tab is opened to decide. -#}
+  <p class="field-help log-runs-help">Every crawl and every round of submitting, newest first. <strong>Pages</strong> counts the list pages fetched, <strong>Links</strong> the addresses found on them, <strong>Accepted</strong> the ones your rules kept, <strong>New</strong> the addresses seen for the first time, <strong>Submitted</strong> the documents handed to Xtracting and <strong>Files</strong> the attachments queued with them.</p>
+  {#- THE MESSAGE IS NOT A COLUMN. It is the sentence that says WHY a run
+      was skipped or blocked - the reason this tab exists - and as an
+      eleventh column it would be the first thing to fall off the right edge
+      of a 1024 px screen, where no scrollbar is drawn and no keyboard can
+      reach it. logs.js writes it as a second row under the run instead, the
+      way the Problems tab writes it under its head line, so it is on the
+      screen at every width and the rows are all the same height.
+
+      The box still scrolls sideways for a window narrower than the ten
+      columns, and logs.js then makes it a focusable region with a name, so
+      a keyboard reaches it and the shaded right edge says there is more. -#}
+  <div class="table-scroll-wrap" id="runs-scroll-wrap">
+    <div class="table-scroll" id="runs-scroll">
+      <table class="table log-runs" id="run-table">
+        <caption class="visually-hidden">Crawl and submit runs, newest first</caption>
+        <thead>
+          <tr>
+            <th scope="col">When</th>
+            <th scope="col">Watched page</th>
+            <th scope="col">Result</th>
+            <th scope="col" class="num">Pages</th>
+            <th scope="col" class="num">Links</th>
+            <th scope="col" class="num">Accepted</th>
+            <th scope="col" class="num">New</th>
+            <th scope="col" class="num">Submitted</th>
+            <th scope="col" class="num">Files</th>
+            <th scope="col" class="num">Took</th>
+          </tr>
+        </thead>
+        <tbody id="run-rows" aria-busy="true">
+          <tr><td colspan="10" class="loading">Loading the run history…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <nav class="pager" id="runs-pager" aria-label="Pages of the run history" hidden>
+    <button type="button" class="button button--secondary" data-page-prev>Previous</button>
+    <span class="pager-info" id="runs-page-info" aria-live="polite"></span>
+    <button type="button" class="button button--secondary" data-page-next>Next</button>
+  </nav>
+</section>
+
+{#- THE TWO STEP STREAMS, one panel each and the same markup twice.
+
+    A list and not a table, like the Problems tab: a step carries one line of
+    particulars whose length nobody controls - an address, a job id, six
+    counts - and a column of those is a column that wraps to three lines on
+    one row and none on the next. The head line holds what can be scanned
+    (when, what, which page) and the detail sits under it, at full width.
+
+    Both are normally EMPTY, because both are written only while a switch in
+    dashboard.settings is on. That is the one state this tab must explain
+    rather than merely show, and logs.js prints the sentence that names the
+    switch. -#}
+<section class="card log-panel" id="panel-crawler" role="tabpanel"
+         aria-labelledby="tab-crawler" tabindex="0" hidden>
+  <div class="card-header">
+    <h2 class="card-title" id="crawler-title" tabindex="-1">Crawler steps</h2>
+    <span class="card-meta" id="crawler-count"></span>
+  </div>
+  <p class="field-help log-steps-help">Every step the crawler took while step logging was switched on, newest first. These rows are kept for 24 hours.</p>
+  <ul class="log-list log-steps" id="crawler-list" aria-busy="true">
+    <li class="loading">Loading the crawler's steps…</li>
+  </ul>
+  <nav class="pager" id="crawler-pager" aria-label="Pages of the crawler's steps" hidden>
+    <button type="button" class="button button--secondary" data-page-prev>Previous</button>
+    <span class="pager-info" id="crawler-page-info" aria-live="polite"></span>
+    <button type="button" class="button button--secondary" data-page-next>Next</button>
+  </nav>
+</section>
+
+<section class="card log-panel" id="panel-collector" role="tabpanel"
+         aria-labelledby="tab-collector" tabindex="0" hidden>
+  <div class="card-header">
+    <h2 class="card-title" id="collector-title" tabindex="-1">Collector steps</h2>
+    <span class="card-meta" id="collector-count"></span>
+  </div>
+  <p class="field-help log-steps-help">Every step the collector took while step logging was switched on, newest first. These rows are kept for 24 hours.</p>
+  <ul class="log-list log-steps" id="collector-list" aria-busy="true">
+    <li class="loading">Loading the collector's steps…</li>
+  </ul>
+  <nav class="pager" id="collector-pager" aria-label="Pages of the collector's steps" hidden>
+    <button type="button" class="button button--secondary" data-page-prev>Previous</button>
+    <span class="pager-info" id="collector-page-info" aria-live="polite"></span>
+    <button type="button" class="button button--secondary" data-page-next>Next</button>
+  </nav>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="{{ static('js/logs.js') }}"></script>
+{% endblock %}

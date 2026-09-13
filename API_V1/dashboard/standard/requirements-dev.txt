@@ -1,0 +1,5 @@
+# Only for running the tests. httpx (Starlette's TestClient) comes from
+# crawlkit's requirements, which requirements.txt pulls in.
+-r requirements.txt
+
+pytest==9.1.1

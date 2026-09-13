@@ -1,0 +1,21 @@
+# The dashboard's own dependencies are the four below. Everything the Sources
+# page needs in order to fetch, parse and classify a page - httpx,
+# beautifulsoup4, lxml, protego, pypdf, openpyxl, playwright - belongs to
+# crawlkit and is pinned there, once: "Test this configuration" in the
+# dashboard runs literally the code the crawler runs later, and two pin lists
+# would eventually be two versions of that code.
+#
+# Leaving this line out does not fail loudly. `app.routers.api_sources` cannot
+# import crawlkit, the router is dropped at startup with a warning, and every
+# /api/sources call answers 404 - which reads like a broken page rather than a
+# missing package.
+#
+# The relative path works in the image as well: the Dockerfile copies both
+# requirement files with their folders (see the Dockerfile in this folder).
+-r ../../crawlkit/requirements.txt
+
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+jinja2==3.1.6
+psycopg[binary,pool]==3.3.5
+python-multipart==0.0.32

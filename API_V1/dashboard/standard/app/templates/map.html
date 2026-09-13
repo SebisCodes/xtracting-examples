@@ -1,0 +1,316 @@
+{#- Map: the entities around a search term, and where they are.
+
+    Two things are drawn on one map, and each has its own switch:
+    the LOCATIONS of the entities in scope (a pin per address, clustered
+    when they crowd), and the CONNECTIONS between them (a line per pair,
+    coloured by the group of the relationship and as thick as the pair is
+    busy). Levels 1-3 say how far from the search term to follow the
+    connections.
+
+    Everything drawn is also written: the right-hand column lists the same
+    places and the same connections as buttons, so a reader who cannot use
+    the map has the information and can still get to the popup. That column
+    also holds the legend, which is a grid cell and never a box floating
+    over the drawing (see the header of static/css/map.css).
+
+    THE SEARCH BOX HAS TWO AXES, exactly as the Diagrams pages have
+    (templates/diagrams.html, app/scope.py): the term is read either as ONE
+    THING - an entity or a bucket - or as an EVENT TYPE, and then the map
+    holds every entity the events of that type are about. One field, one
+    switch in front of it; the page is short of room above the map and a
+    second search box beside the first would cost the picture another row.
+-#}
+{% extends "_layout.html" %}
+{% from "_macros.html" import typeahead, search_actions %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ static('vendor/leaflet/leaflet.css') }}">
+<link rel="stylesheet" href="{{ static('vendor/leaflet.markercluster/MarkerCluster.css') }}">
+<link rel="stylesheet" href="{{ static('vendor/leaflet.markercluster/MarkerCluster.Default.css') }}">
+<link rel="stylesheet" href="{{ static('css/views.css') }}">
+<link rel="stylesheet" href="{{ static('css/map.css') }}">
+{#- The tile server is a setting (DASHBOARD_TILE_URL); map.js reads it from
+    here, exactly as minimap.js does on the Query page. -#}
+<meta name="tile-url" content="{{ request.app.state.cfg.tile_url if request.app.state.cfg is defined else '' }}">
+{% endblock %}
+
+{#- WHAT THE FIELD ASKS FOR ON EACH AXIS: the label, the suggestion list,
+    the placeholder. static/js/map.js holds the same table so the switch can
+    change the field without a round trip, and tests/ui/test_map_view.py
+    pins the two against each other. -#}
+{%- set axis_fields = {
+      "object": ("Entity or bucket", "/api/suggest/entity_or_bucket", "Search for an entity or bucket"),
+      "type":   ("Event type", "/api/suggest/event_type", "Search for an event type"),
+   } -%}
+{%- set current_axis = 'type' if request.query_params.get('axis') == 'type' else 'object' -%}
+{%- set field = axis_fields[current_axis] -%}
+
+{% block content %}
+{#- HALF OF THIS DRAWING OBEYS THE PERSPECTIVE FILTER AND HALF OF IT DOES
+    NOT, and the reader is told which half rather than left to assume.
+
+    The line under the heading (_layout.html, on every filtered view) says
+    the page is a subset. On this one that is true of WHERE THE MAP STARTS -
+    the entities the search term resolves to - and deliberately not true of
+    the network drawn around them: the expansion is a graph walk, and
+    filtering each hop by the importance of the document that recorded it
+    would cut paths IN THE MIDDLE and draw two disconnected halves of one
+    network with nothing on screen saying a link had been removed
+    (app/routers/api_map.py: _SCOPE_IDS_FILTERED).
+
+    So this qualifier sits directly under that sentence, in the same box's
+    voice, and only when the filter is actually on. -#}
+{%- if filter_applies %}
+<div class="notice notice--info" id="map-filter-note">
+  <p>On this view the filter decides <strong>where the map starts</strong>: the entities the search finds. What they are connected to is then drawn in full, however important its own documents are - a network cut in the middle would be a picture of something that does not exist.</p>
+</div>
+{%- endif %}
+<div class="page-header">
+  <h1>Map</h1>
+  <details class="page-about">
+    <summary>About this page</summary>
+    <div class="page-about-body">
+      <p class="page-purpose">Where an entity and the entities around it are, and how they are connected.</p>
+      <p><strong>Object</strong> searches for one thing: an entity, or a bucket, whose members are all drawn.</p>
+      <p><strong>Type</strong> searches for an event type: every entity the events of that kind are about is drawn on the map, with the same levels and the same connections.</p>
+      <p><strong>Group by</strong> decides what a node is. <em>Entities</em> draws one per entity. <em>Buckets</em> draws one per bucket, so "Germany" is a single node holding everything you gave it - and an entity that belongs to two buckets is drawn in both, because a connection to it really is a connection to each of them.</p>
+      <p>Level 1 is what the term is directly connected to; level 2 adds what those are connected to, and so on.</p>
+      <p>The pin of the entity that was searched for is drawn in the accent colour and marked “searched”; the pins around it are grey. Every pin's tip stands on the coordinate the archive has for it.</p>
+      <p>The two checklists beside the map filter what is drawn: connection types for the lines, location types for the pins. Each has a box that narrows the list and buttons for all and none.</p>
+      <p>Scrolling over the map zooms it; the + and − buttons do the same.</p>
+    </div>
+  </details>
+</div>
+
+{#- ONE TOOLBAR, ONE RULE (see the header of static/css/map.css).
+    The search field, the levels and the two Draw switches were three
+    stacked rows in a card that used half its width, and the result was a
+    map whose top edge sat at y=594 in a 768 px viewport: the first screen
+    of the Map page was a form. They are one wrapping toolbar now - the
+    search field takes the space that is left, the other two are as wide as
+    their contents - which starts the map about 150 px higher and puts more
+    than half of it above the fold at 1024x768. Below ~62 rem they wrap
+    back into rows by themselves.
+
+    THE ROW LINES UP. Every control is 44 px tall, its label sits directly
+    above it, and a group without a label - the "Show on map" button - keeps
+    the label row all the same, so it cannot float up and sit higher than
+    its neighbours. The order is the one every view uses: what is searched,
+    then how it is narrowed, then the action. -#}
+<form class="filter-card map-controls" id="map-form" novalidate data-axis="{{ current_axis }}">
+  <div class="toolbar map-toolbar">
+    {#- ONE FIELD, TWO QUESTIONS - the switch the Diagrams pages have, in
+        the same markup and with the same words, because it is the same
+        question: is the term one thing or a whole class? It comes first,
+        because it says what the field beside it means. -#}
+    <div class="field field--fixed axis-field">
+      <span class="field-label" id="map-axis-label">Search by</span>
+      <div class="segmented" role="group" aria-labelledby="map-axis-label" data-axis-switch>
+        <button type="button" class="button button--secondary" data-axis="object"
+                aria-pressed="{{ 'true' if current_axis == 'object' else 'false' }}"
+                title="One thing: an entity or a bucket">Entity</button>
+        <button type="button" class="button button--secondary" data-axis="type"
+                aria-pressed="{{ 'true' if current_axis == 'type' else 'false' }}"
+                title="A whole class: an event type">Event type</button>
+      </div>
+    </div>
+
+    {#- NO HINT LINE: what a bucket does is in the About disclosure.
+
+        THE SAME PLACEHOLDER GRAMMAR AS EVERY OTHER SEARCH BOX in the
+        product - Diagrams uses this very sentence. A sample value ("Apple")
+        cannot be told apart from a set one here: this field shows what IS
+        set AS its placeholder, so a word that looks like a value is a field
+        that looks answered while it is empty. -#}
+    {{ typeahead("q", label=field[0], suggest_url=field[1],
+                 placeholder=field[2],
+                 empty_label="- clear the search -") }}
+
+    <div class="field field--fixed field--tight">
+      <span class="field-label" id="levels-label">Connection levels</span>
+      <div class="segmented" role="group" aria-labelledby="levels-label" id="map-levels">
+        <button type="button" class="button button--secondary" data-levels="1" aria-pressed="true">1</button>
+        <button type="button" class="button button--secondary" data-levels="2" aria-pressed="false">2</button>
+        <button type="button" class="button button--secondary" data-levels="3" aria-pressed="false">3</button>
+      </div>
+      {#- What a level is: About disclosure, top of the page. -#}
+    </div>
+
+    {#- ONE OR THE OTHER, NOT TWO TICK BOXES.
+        These were two checkboxes and that was wrong about the data. The two
+        are not layers that add up - they answer different questions and each
+        needs the OTHER one's pins to be absent:
+
+          Connections  the network around the term. Every entity is drawn at
+                       ONE place, the address it carries most often, because
+                       a line has to end somewhere and a company with nine
+                       offices would otherwise be nine ends of the same line.
+          Locations    every address of the entity that was searched, and
+                       nothing else. No expansion, no lines.
+
+        With both ticked, a search for one politician put pins on the map for
+        every company they are connected to, and nothing on screen said whose
+        addresses those were. Connections is the default because it is what
+        the page is for; Locations is one click away. -#}
+    <div class="field field--fixed">
+      <span class="field-label" id="draw-label">Show</span>
+      <div class="segmented" role="group" aria-labelledby="draw-label" data-map-mode>
+        <button type="button" class="button button--secondary" data-mode="connections"
+                aria-pressed="true">Connections</button>
+        <button type="button" class="button button--secondary" data-mode="locations"
+                aria-pressed="false">Locations</button>
+      </div>
+    </div>
+
+    {#- BY ENTITY OR BY BUCKET, and it is the same network either way: the
+        archive stores connections between entities, and a bucket is this
+        dashboard's own idea of which of them a reader means as one thing.
+
+        An entity that is in two buckets is drawn in BOTH, so a connection to
+        it is a line to each - folding it to one would drop a bucket with
+        nothing on screen saying which. What it costs is that one connection can
+        become two lines, and the count on each says how many facts are behind
+        it, so nothing is double-counted inside a line.
+
+        Only on Connections: the Locations view draws the addresses of the
+        search and nothing else, so it has no ends to group. The switch says so
+        by going away (static/js/map.js: syncGrouping). -#}
+    <div class="field field--fixed" id="group-field">
+      <span class="field-label" id="group-label">Group by</span>
+      <div class="segmented" role="group" aria-labelledby="group-label" data-map-group>
+        <button type="button" class="button button--secondary" data-group="entities"
+                aria-pressed="true">Entities</button>
+        <button type="button" class="button button--secondary" data-group="buckets"
+                aria-pressed="false">Buckets</button>
+      </div>
+    </div>
+
+  </div>
+  {#- SAVE IMAGE IS ON THE MAP NOW, as a control in its top right corner
+      beside the zoom buttons (static/js/mapimage.js: addSaveControl says
+      why). The row under the fields is left holding the two things that
+      ask a question, which is what it holds on every other view. -#}
+  {{ search_actions(id="map-search") }}
+</form>
+
+{#- NO NOTICE BAND ABOVE THE MAP. The other three views that resolve an
+    entity say what the term became in a notice with a "Show only …" button
+    (static/js/resolved.js); here that band measured 82 px and pushed the
+    top of the map from y=510 to y=592 in a 768 px window - a quarter of the
+    picture off the first screen, which is the very thing
+    test_the_map_starts_above_the_fold exists to stop. The caption below the
+    map's own heading says it instead, in one line that was there anyway
+    (static/js/map.js: captionText). -#}
+<div class="map-layout">
+  <div class="map-root" id="map-root">
+    {#- role=application would take the arrow keys away from the page; the
+        container is a plain region with a name, and Leaflet's own keyboard
+        handling (arrows pan, +/- zoom, Enter opens a marker) works inside
+        it. The list on the right is the text alternative. -#}
+    <div class="map-canvas" id="map" role="region" tabindex="0"
+         aria-label="Map of the entities found. The same places and connections are listed beside it."></div>
+    {#- EVERY LINE ABOUT THE PICTURE GOES UNDER THE PICTURE.
+        One rule, both map views: a line above a map moves the map down by
+        its own height, and all three of these come and go - the status
+        appears while a request runs and grows to two lines on a warning,
+        the retry button appears only after a failure, and the caption grows
+        to two lines as soon as a search has run. Above the canvas, each of
+        them shifted the map while somebody was reading why; on a 768 px
+        screen the bottom of the picture went past the fold.
+
+        They stay inside .map-root, so they travel with the sticky map and a
+        reader who activates a row far down the list still sees them. -#}
+    <p class="map-status" id="map-status" aria-live="polite"></p>
+    <p class="map-retry no-print" id="map-retry" hidden>
+      <button type="button" class="button" id="map-retry-button">Try again</button>
+    </p>
+    <p class="map-caption" id="map-caption">Search for an entity to show it on the map.</p>
+  </div>
+
+  <aside class="map-side" aria-label="Legend and lists">
+    <div id="map-legend"></div>
+
+    {#- TWO CHECKLISTS, ONE SHAPE. The connection types filter the lines, the
+        location types filter the pins, and both grow with a real archive -
+        so each gets two controls: a box that narrows the list to what is typed, and a
+        way to clear every tick in one gesture rather than sixty. "None" is
+        not the same as "All": it draws nothing, and the map says so. -#}
+    <section class="card" id="map-types-card" hidden>
+      <div class="card-header">
+        <h2 class="card-title" id="map-types-title">Connection types</h2>
+        <span class="card-meta" id="map-types-count"></span>
+      </div>
+      <div class="type-tools">
+        <div class="field type-find">
+          <label class="field-label" for="map-types-find">Find a type</label>
+          <input type="search" id="map-types-find" placeholder="Every type"
+                 autocomplete="off" spellcheck="false">
+        </div>
+        <div class="field field--fixed">
+          <span class="field-label" aria-hidden="true"></span>
+          <div class="row" role="group" aria-labelledby="map-types-title">
+            <button type="button" class="button button--quiet" id="types-all">All types</button>
+            <button type="button" class="button button--quiet" id="types-none">No types</button>
+          </div>
+        </div>
+      </div>
+      <ul class="type-list" id="map-types"></ul>
+      <p class="field-help" id="map-types-note"></p>
+    </section>
+
+    {#- The location types the pins carry. The data is in the answer
+        (`markers[].type`), and filtering on it is the one thing a person
+        does with a map full of pins - "show me the factories". Client side,
+        like the connection
+        checklist: the answer already holds every pin. -#}
+    <section class="card" id="map-places-types-card" hidden>
+      <div class="card-header">
+        <h2 class="card-title" id="map-place-types-title">Location types</h2>
+        <span class="card-meta" id="map-place-types-count"></span>
+      </div>
+      <div class="type-tools">
+        <div class="field type-find">
+          <label class="field-label" for="map-place-types-find">Find a type</label>
+          <input type="search" id="map-place-types-find" placeholder="Every type"
+                 autocomplete="off" spellcheck="false">
+        </div>
+        <div class="field field--fixed">
+          <span class="field-label" aria-hidden="true"></span>
+          <div class="row" role="group" aria-labelledby="map-place-types-title">
+            <button type="button" class="button button--quiet" id="place-types-all">All types</button>
+            <button type="button" class="button button--quiet" id="place-types-none">No types</button>
+          </div>
+        </div>
+      </div>
+      <ul class="type-list" id="map-place-types"></ul>
+      <p class="field-help" id="map-place-types-note"></p>
+    </section>
+
+    <section class="card" aria-labelledby="places-title">
+      <div class="card-header">
+        <h2 class="card-title" id="places-title">Places</h2>
+        <span class="card-meta" id="places-count"></span>
+      </div>
+      <ul class="map-list" id="map-places">
+        <li class="empty">Nothing on the map yet.</li>
+      </ul>
+    </section>
+
+    <section class="card" aria-labelledby="lines-title">
+      <div class="card-header">
+        <h2 class="card-title" id="lines-title">Connections</h2>
+        <span class="card-meta" id="lines-count"></span>
+      </div>
+      <ul class="map-list" id="map-lines">
+        <li class="empty">Nothing on the map yet.</li>
+      </ul>
+    </section>
+  </aside>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ static('vendor/leaflet/leaflet.js') }}"></script>
+<script src="{{ static('vendor/leaflet.markercluster/leaflet.markercluster.js') }}"></script>
+<script type="module" src="{{ static('js/map.js') }}"></script>
+{% endblock %}

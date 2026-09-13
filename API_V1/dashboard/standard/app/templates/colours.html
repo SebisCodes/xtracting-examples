@@ -1,0 +1,209 @@
+{#- Connection colours: the groups, and every type that is in one.
+
+    The colour of an edge is a setting, not a regex list in a script file.
+    A list in code has two consequences, both of them faults: nobody can
+    change a colour without editing JavaScript, and a type can change group
+    when the list is "improved", so the same edge comes out in two colours
+    on two days.
+
+    Here the assignment is a table. The left column is the groups (colour,
+    name, description, how many types are in them); the right column is the
+    INVERTED view - every connection type the project holds, in every
+    language, with the group it is in. That direction is the one people
+    actually ask in: "what happens to Lieferant" is answered by looking up
+    Lieferant, not by opening groups until one of them contains it.
+
+    Suggest fills the fields and saves nothing. The keyword rules
+    (app/colours.py) are a helper, not an authority; what is stored is what
+    somebody agreed to.
+-#}
+{% extends "_layout.html" %}
+{% from "_macros.html" import typeahead, search_actions %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ static('css/settings.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Connection colours</h1>
+  <details class="page-about">
+    <summary>About this page</summary>
+    <div class="page-about-body">
+      <p class="page-purpose">Connection types are free text from the extraction, so they are grouped: one colour per group, on the map and in the graph. A type nobody has assigned takes the colour of the fallback group.</p>
+      <p>The list on the left is one line per group, counting the connection types of this project. Open one to change its colour, its name or what belongs in it. A new group starts empty; types are assigned to it in the table on the right.</p>
+      <p>The table on the right lists every connection type in this project, in every language - one row per spelling, so “Supplier” and “Lieferant” are assigned separately and can still go to the same group.</p>
+      <p>A GROUP IS ALSO A BUCKET. Searching for a group’s name in any view searches every connection type in it, exactly as a bucket does for entities or types - so connection types are grouped here and nowhere else. That is why the Buckets page has no connection-type kind: one thing grouped in two places would sooner or later be grouped two different ways.</p>
+    </div>
+  </details>
+</div>
+
+<div class="settings-columns">
+
+  {#- The add form is the FIRST thing in this column, not the last.
+
+      Under the list would be tidy and wrong: eleven groups of three fields
+      each are three screens, and "add a group" would be three screens of
+      scrolling away. A customer with twenty type families would have five.
+      The list under it is collapsed for the same reason -
+      one line per group, opened when there is something to change - so the
+      whole column is a page of summaries and the work is at the top. -#}
+  <section class="card" id="groups-panel" aria-labelledby="groups-title">
+    <div class="card-header">
+      <h2 id="groups-title" class="card-title">Colour groups</h2>
+      <span class="card-meta" id="groups-meta"></span>
+    </div>
+
+    <form class="group-new" id="group-new" novalidate>
+      <h3 class="group-new-title">Add a group</h3>
+      <div class="toolbar settings-toolbar">
+        <div class="field">
+          <label class="field-label" for="new-group-name">Name</label>
+          <input type="text" id="new-group-name" maxlength="200" placeholder="For example: Logistics">
+        </div>
+        <div class="field group-colour-field">
+          <label class="field-label" for="new-group-colour">Colour</label>
+          <input type="color" id="new-group-colour" value="#1d4f91">
+        </div>
+        <div class="field field--action">
+          {#- The label row is occupied even here, so the button sits on the
+              control baseline instead of floating below it. -#}
+          <span class="field-label" aria-hidden="true"></span>
+          <button type="submit" class="button">Add group</button>
+        </div>
+      </div>
+      {#- EMPTY UNTIL THERE IS SOMETHING TO SAY. Not "a new group starts
+          empty…", a fact about the feature read once; that sentence is in
+          the About disclosure, and this line is where the form answers
+          back. -#}
+      <p class="field-help" id="group-new-status" aria-live="polite"></p>
+    </form>
+
+    {#- How the list works: About disclosure, top of the page. -#}
+
+    {#- A failed request never empties this column. When the groups
+        have been shown once, the list stays exactly as it was and this
+        notice says that it is the last answer rather than the current one -
+        losing eleven rows is a worse answer than eleven rows that are a
+        minute old. It stays until it is resolved (a successful reload
+        removes it), it says what happened, and it offers the retry. -#}
+    <div class="notice notice--error settings-alert" id="groups-error" role="status" hidden>
+      <div class="notice-body">
+        <p id="groups-error-text"></p>
+        <p class="muted" id="groups-error-detail" hidden></p>
+      </div>
+      <button type="button" class="button" id="groups-retry">Try again</button>
+    </div>
+
+    <ul class="group-list list" id="group-list" aria-busy="false">
+      <li class="loading">Loading groups…</li>
+    </ul>
+  </section>
+
+  <section class="card" id="types-panel" aria-labelledby="types-title">
+    <div class="card-header">
+      <h2 id="types-title" class="card-title">Connection types</h2>
+      <span class="card-meta" id="types-meta"></span>
+    </div>
+    {#- What the table holds: About disclosure, top of the page. -#}
+
+    {#- THE SEARCH IS THE FIRST THING IN THE TOOLBAR, then how the list is
+        narrowed, then the action - the same order, the same control height
+        and the same label-above-control rule as every other toolbar. The
+        checkbox group has its own label row, empty or not - without one it
+        floats up out of line. -#}
+    <form class="toolbar settings-toolbar types-toolbar" id="types-filter" novalidate>
+      {#- NO HINT LINE: the placeholder says what an empty box means and
+          the list opens on focus. -#}
+      {{ typeahead("q", label="Find a type",
+                   suggest_url="/api/suggest/connection_type",
+                   placeholder="Every type",
+                   empty_label="- every type -",
+                   min_chars=0, limit=8, submit=true) }}
+      <div class="field types-filter-field">
+        <span class="field-label" id="types-narrow-label">Narrow the list</span>
+        <div class="row" role="group" aria-labelledby="types-narrow-label">
+          <label class="check">
+            <input type="checkbox" id="types-unassigned"> Only types without a group
+          </label>
+        </div>
+      </div>
+      {#- "Suggest groups" is not a query - it proposes assignments and
+          writes nothing - so it keeps its own cell; the query goes under
+          the fields like every other view's. -#}
+      <div class="field field--action">
+        <span class="field-label" aria-hidden="true"></span>
+        <button type="button" class="button button--secondary" id="types-suggest">Suggest groups</button>
+      </div>
+      {{ search_actions() }}
+    </form>
+
+    <div class="notice notice--warn proposal-bar" id="types-proposal" hidden>
+      <p id="types-proposal-text"></p>
+      <div class="row">
+        <button type="button" class="button" id="types-proposal-save">Save the suggestions</button>
+        <button type="button" class="button button--secondary" id="types-proposal-clear">Discard them</button>
+      </div>
+    </div>
+
+    {#- Two different failures, two different sentences, and colours.js picks
+        the one that is TRUE:
+
+          nothing loaded yet   the selects cannot be built at all, so the
+                               table is not drawn and this says so;
+
+          a reload failed      the groups from the last answer are still in
+                               memory, the selects are complete and a change
+                               still reaches the archive. Saying "the group
+                               cannot be changed here" over a table that
+                               saves every change tells the customer their edit is
+                               impossible in the same breath as the row says
+                               "Saved". The wording below is the second case
+                               made honest: what may be stale, and what still
+                               works.
+
+        Never disable the selects: the request a select sends has nothing to
+        do with the one that failed. -#}
+    <div class="notice notice--error types-blocked" id="types-blocked" role="status" hidden>
+      <p id="types-blocked-text">The colour groups could not be loaded, so the connection types cannot be shown yet.</p>
+      <button type="button" class="button" id="types-retry">Try again</button>
+    </div>
+
+    <div class="table-scroll">
+      {#- NO <caption>. It read "Connection types and their groups" two lines
+          under a heading that reads "Connection types" - the same words
+          twice, and the second copy told nobody anything. The panel heading
+          IS the table's name, so the table points at it: an accessible name
+          without a second visible line. (A visually-hidden caption is not
+          the answer either - a <caption> box does not collapse to 1 px the
+          way a <span> does, and the print critic catches it as a clipped
+          box.) -#}
+      <table class="table types-table" aria-labelledby="types-title">
+        <thead>
+          <tr>
+            <th scope="col">Type</th>
+            <th scope="col" class="num">Connections</th>
+            <th scope="col">Group</th>
+            <th scope="col">Status</th>
+          </tr>
+        </thead>
+        <tbody id="types-body" aria-busy="false">
+          <tr><td colspan="4" class="loading">Loading types…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="empty" id="types-empty" hidden>No connection type matches this filter.</p>
+
+    <nav class="pager" id="types-pager" aria-label="Pages of connection types" hidden>
+      <button type="button" class="button button--secondary" data-page-prev>Previous</button>
+      <span class="pager-info" id="types-page-info" aria-live="polite"></span>
+      <button type="button" class="button button--secondary" data-page-next>Next</button>
+    </nav>
+  </section>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="{{ static('js/colours.js') }}"></script>
+{% endblock %}

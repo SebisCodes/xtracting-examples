@@ -1,0 +1,563 @@
+/* ==========================================================================
+ *  The two settings views: Buckets and Connection colours.
+ *
+ *  Loaded by templates/buckets.html and templates/colours.html on top of
+ *  app.css, which owns the tokens, the buttons, the cards and the table.
+ *  Nothing here restyles a shared class; everything is a new one.
+ *
+ *  ONE RULE ABOVE ALL: NO `overflow` ON ANY BLOCK THAT CONTAINS A TYPEAHEAD.
+ *  The suggestion list is absolutely positioned inside .typeahead, and an
+ *  overflow anywhere above it clips the list away - the markup is complete
+ *  and nothing is visible. Both pages have a typeahead (the member field,
+ *  the type filter), so the cards, the list items and the toolbars here are
+ *  deliberately overflow-free. The only scroll container is .table-scroll,
+ *  which app.css already defines and which never contains one.
+ * ========================================================================== */
+
+/* ── Shared pieces ────────────────────────────────────────────────────── */
+
+/* "Saved", next to the thing that was saved. It is in the flow rather than
+ * floating, so it can never cover the next control - and it is inside an
+ * aria-live region, so it is heard as well as seen. */
+.save-note {
+  color: var(--ok);
+  font-weight: 600;
+  opacity: 0;
+  transition: opacity 120ms linear;
+}
+.save-note.is-shown { opacity: 1; }
+/* The same place, the other answer. Red and in words: "Not saved - …", left
+ * standing until the next attempt, because an error that fades is an error
+ * nobody read. */
+.save-failed,
+.save-note.save-failed {
+  color: var(--error);
+  font-weight: 600;
+  opacity: 1;
+}
+
+/* Undo strips: one line, in the page, for five seconds. Not a toast -
+ * this one has a button in it, and a message that can be pressed must not
+ * be able to move or disappear under the pointer. */
+.undo-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin: 0 0 var(--gap);
+  padding: 0.5rem 0.75rem;
+  background: var(--accent-tint);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+}
+.undo-text { flex: 1 1 16rem; }
+
+/* The five seconds, visible.
+ *
+ * Two carriers for one fact, because neither is enough alone: a number for
+ * anyone who reads a number, and a draining bar for anyone who reads a
+ * shape. The bar is the one that moves, so prefers-reduced-motion drops it
+ * and keeps the number - never the other way round.
+ *
+ * `font-variant-numeric: tabular-nums` so "5 s" and "4 s" are the same width
+ * and the button beside them does not step sideways once a second. */
+.undo-clock {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 2.5rem;
+  text-align: right;
+}
+.undo-bar {
+  flex-basis: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--accent);
+  transform-origin: left center;
+  transform: scaleX(1);
+}
+/* An ANIMATION rather than a transition, for one reason: an animation can be
+ * paused where it stands. The countdown holds while the pointer is over the
+ * strip or the focus is inside it (WCAG 2.2.1), and the bar has to hold with
+ * it - two carriers of one fact that disagree are worse than one. A
+ * transition frozen with `transition: none` jumps to its end instead, which
+ * would drain the bar the moment the mouse arrived. */
+@keyframes undo-drain {
+  from { transform: scaleX(1); }
+  to   { transform: scaleX(0); }
+}
+.undo-bar.is-draining {
+  animation-name: undo-drain;
+  animation-duration: 5000ms;    /* the strip overrides it with its own window */
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+.is-held .undo-bar { animation-play-state: paused; }
+/* And the strip says why it is waiting, for the reader who is not holding the
+ * mouse but has tabbed into it. */
+.is-held .undo-clock::after {
+  content: " (paused)";
+  font-variant-numeric: normal;
+}
+/* The sentence that replaces the strip when the window has closed. Not a
+ * colour change: it says it. */
+.undo-gone { color: var(--muted); }
+
+@media (prefers-reduced-motion: reduce) {
+  .undo-bar { display: none; }
+}
+
+/* The question a group asks before it is deleted.
+ *
+ * `margin-left: auto` on the destructive button is the whole point: "Keep
+ * it" is where the focus lands and where the pointer already is, and
+ * "Delete" is a deliberate journey to the other end of the strip. NN/g on
+ * consequential options next to benign ones; Fitts' law does the rest. */
+.confirm-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--error-tint);
+  border: 1px solid var(--error);
+  border-radius: var(--radius);
+  flex-basis: 100%;
+}
+.confirm-text { flex: 1 1 14rem; }
+.confirm-strip .button--danger { margin-left: auto; }
+
+/* A number or a sentence that reports something wrong with the data - a
+ * member that matches nothing, a colour too pale to see. Colour is not the
+ * only carrier: the text says so too. */
+.is-warning { color: var(--warn); font-weight: 600; }
+
+/* ── Buckets ──────────────────────────────────────────────────────────── */
+
+.bucket-new { margin-bottom: var(--gap); }
+.bucket-new .field { flex: 1 1 18rem; }
+.bucket-scope { flex: 0 1 auto; }
+
+.bucket-list { display: grid; gap: var(--gap); }
+.bucket-card { display: block; }
+
+.bucket-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.bucket-title { flex: 1 1 16rem; max-width: 30rem; }
+.bucket-title .bucket-rename { font-size: 1.125rem; font-weight: 650; }
+.bucket-scope-tag {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+  margin: 0 0 0.25rem;
+}
+.bucket-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-left: auto;
+  padding-bottom: 0.25rem;
+}
+
+.bucket-matches { margin: 0 0 0.75rem; color: var(--muted); }
+.bucket-matches.is-warning { color: var(--warn); }
+
+.bucket-members { margin-bottom: 0.5rem; }
+.bucket-members td.member-type { color: var(--muted); }
+.bucket-members .member-count { font-variant-numeric: tabular-nums; }
+
+/* The add row: name, type, button. `align-items: flex-end` keeps the
+ * button on the baseline of the two fields, and the fields keep their
+ * labels above them rather than beside them (a label to the left of a
+ * field is the first thing to break at 1024 px). */
+.bucket-add { align-items: flex-end; margin-top: 0.5rem; }
+.bucket-add .typeahead { flex: 1 1 18rem; }
+.bucket-type-field { flex: 0 1 14rem; }
+
+/* ── Connection colours ───────────────────────────────────────────────── */
+
+/* Groups on the left, the inverted type list on the right. `minmax(0, …)`
+ * on both tracks: without the 0 minimum the table in the right column
+ * refuses to shrink and pushes the page into a horizontal scroll bar. */
+/* TWO TRACKS, THE SECOND TWICE THE FIRST. It was 22rem and "the rest",
+ * which is an arbitrary width - and at 22 rem the "Add a group" row above
+ * the list (name, colour, button) wrapped onto two lines while the table
+ * beside it had 1040 px for four columns. A whole multiple is the rule for
+ * a row whose elements genuinely need different room (app.css, "equal
+ * rows"): the table gets twice the groups, and the two columns still read
+ * as one rhythm.
+ *
+ * `align-items: start` and not stretch: the two columns hold lists of
+ * different lengths, and stretching the shorter one only draws a tall
+ * empty box under it. Equal here means equal tracks and one top edge. */
+.settings-columns {
+  display: grid;
+  gap: var(--gap);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  align-items: start;
+}
+@media (max-width: 68rem) {
+  .settings-columns { grid-template-columns: minmax(0, 1fr); }
+}
+/* NO `order` HERE, EVER. Pulling the type list above the group list when
+ * stacked (so that eleven open group editors cannot push the table off a
+ * 768 px screen) makes the visible order the reverse of the DOM order, so
+ * the first Tab on a 1024 px screen throws the focus 1600 px down the page
+ * to the "Add a group" field, walks every group, and
+ * only then came back up to the table the reader was looking at (WCAG 1.3.2,
+ * 2.4.3). The groups are one line each now - the whole column is 745 px - so
+ * the reason is gone and the order is the source order at both widths. */
+
+/* A GROUP IS ONE LINE UNTIL IT IS OPENED.
+ *
+ * Eleven groups of three fields each measured 2867 px - three screens of
+ * editors nobody was editing, with the add form below all of them. Each
+ * group is a <summary> now (swatch, name, how many types) and its editor is
+ * the disclosure behind it. `<details>` rather than a hand-rolled toggle
+ * because the browser already opens it with Enter and Space and already
+ * tells a screen reader whether it is open.
+ *
+ * No `overflow` anywhere in here: the file's rule at the top holds, and a
+ * details element is a block like any other. */
+.group-list { margin-bottom: 0; }
+.group-row {
+  display: block;
+  padding: 0;
+  border-top: 1px solid var(--line-soft);
+}
+.group-row:first-child { border-top: 0; }
+
+.group-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  /* 44 px of row, which is this dashboard's own target size and not only
+   * WCAG's 24 - the whole line is the control that opens the group. */
+  min-height: 44px;
+  padding: 0.5rem 0.25rem;
+  cursor: pointer;
+  border-radius: var(--radius);
+}
+.group-summary:hover { background: var(--accent-tint); }
+.group-summary::-webkit-details-marker { display: none; }
+/* The disclosure triangle, drawn rather than borrowed, so it points the same
+ * way in every browser and turns when the group opens. */
+.group-summary::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 0;
+  height: 0;
+  border-left: 7px solid currentColor;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  transition: transform 120ms linear;
+}
+.group-details[open] > .group-summary::before { transform: rotate(90deg); }
+@media (prefers-reduced-motion: reduce) {
+  .group-summary::before { transition: none; }
+}
+.group-summary .group-swatch { flex: 0 0 auto; }
+.group-summary-name { flex: 1 1 8rem; font-weight: 600; }
+
+.group-body {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.25rem 0.25rem 0.75rem;
+}
+.group-colour-pair { display: flex; align-items: center; gap: 0.5rem; }
+.group-colour { flex: 0 0 auto; }
+/* Wide enough for "#1D4F91" and no wider: it is a seven-character value,
+ * and a field that looks like it takes a sentence invites one. */
+.group-hex { flex: 0 0 7.5rem; font-family: var(--mono); }
+.group-name { font-weight: 600; }
+/* A textarea rather than a one-line field: a description is a sentence, and
+ * three of the eleven seeded ones are longer than this column is wide. An
+ * <input> whose overflow is reachable only by hovering for a tooltip is
+ * exactly backwards - the person who needs the sentence is the one least
+ * likely to go looking for it. */
+.group-description { width: 100%; resize: vertical; min-height: 3.5rem; }
+
+.group-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+.group-types { color: var(--muted); font-variant-numeric: tabular-nums; }
+.group-status { margin-right: auto; }
+.group-warning { color: var(--warn); font-weight: 600; flex-basis: 100%; }
+
+/* The add form is the first block of the column now, so its rule sits under
+ * it rather than above it. The column is 22 rem wide, so the name takes a
+ * line of its own and the colour and the button share the next one - three
+ * stacked blocks would have put the list back below the fold. */
+.group-new { border-bottom: 1px solid var(--line-soft); padding-bottom: 0.75rem; margin-bottom: 0.75rem; }
+.group-new .toolbar { align-items: flex-end; }
+.group-new .field { flex: 1 1 12rem; }
+.group-new .group-colour-field { flex: 0 0 auto; }
+/* AS WIDE AS ITS WORDS. Stretched across the column it would be the
+ * biggest, bluest thing in a panel whose subject is the list of groups
+ * underneath - the eye going to "Add group" before it goes to the eleven
+ * groups the page exists to show. A button that is as wide as what it says still reads as
+ * the primary action of its own form. */
+.group-new button[type="submit"] { flex: 0 0 auto; }
+#group-list-help { margin: 0 0 0.5rem; }
+
+/* The alert above the group list, and the one between the toolbar and the
+ * type table. Both hold a sentence and a button, so both are a row rather
+ * than a paragraph, and both STAY until the load they complain about
+ * succeeds - an error that fades leaves somebody reading stale rows with
+ * nothing on screen to say so. */
+.settings-alert {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.settings-alert .notice-body { flex: 1 1 14rem; }
+.types-blocked {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+.types-blocked p { flex: 1 1 18rem; margin: 0; }
+.notice-body { flex: 1 1 14rem; }
+.notice-body p { margin: 0 0 0.25rem; }
+.notice-body p:last-child { margin-bottom: 0; }
+.group-new-title { margin: 0 0 0.5rem; font-size: 1rem; }
+.group-colour-field { flex: 0 0 auto; }
+
+.types-toolbar { margin: 0.75rem 0; }
+.types-toolbar .typeahead { flex: 1 1 16rem; }
+
+.proposal-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+.proposal-bar p { flex: 1 1 16rem; margin: 0; }
+
+.types-table { table-layout: auto; }
+.types-table td { vertical-align: middle; }
+.type-name { font-weight: 500; }
+.type-swatch { margin-right: 0.25rem; }
+.type-group { min-width: 12rem; max-width: 100%; }
+/* "Saved", the seconds left and Undo on one line.
+ *
+ * Spaced with margins, NOT with a flex gap: `display: flex` on a <td> takes
+ * the cell out of the table's own layout, and the whole Status column then
+ * sits a few pixels below the row it belongs to. */
+.type-status { white-space: nowrap; }
+.type-status > * { vertical-align: middle; }
+/* …EXCEPT THE FAILURE, which is a sentence and not a cluster of controls.
+ *
+ * "Saved - 5 s - Undo" is three things that belong on one line; "Not saved -
+ * the archive is not reachable - try again in a moment" is prose, and with
+ * the nowrap above it it made the Status column as wide as the sentence.
+ * The table then reached past its own scroll box - measured 166 px hidden
+ * at 1440x900 and 214 px at 1024x768 - and the half of the line that says
+ * what to do was the half that was cut off. It wraps inside the column
+ * instead, and the column stops growing at a width a sentence can be read
+ * in. */
+.type-status .save-failed {
+  white-space: normal;
+  display: inline-block;
+  max-width: 22rem;
+}
+.type-status .undo-clock {
+  display: inline-block;
+  min-width: 0;
+  text-align: left;
+  margin: 0 0.25rem 0 0.4rem;
+}
+/* The line under a card's add form. Empty almost always, and an empty <p>
+ * with the help text's margins would cost every card a few pixels for
+ * nothing - on a page of twenty cards that is a screenful. */
+.bucket-add-status:empty { display: none; }
+.bucket-add-status { margin: 0.25rem 0 0; }
+
+.type-row.is-proposed { background: var(--warn-tint); }
+.tag--proposed { background: var(--warn-tint); border-color: var(--warn); color: var(--warn); }
+
+/* A row whose type has no group of its own is not an error - it says which
+ * colour it falls back to, in the muted voice of a default. */
+.type-row.is-unassigned .type-name { font-weight: 400; }
+
+@media print {
+  /* The settings pages print as a RECORD OF WHAT IS SET, not as a picture of
+   * a form. The controls that change something are noise on paper and go;
+   * the controls that hold a value stay, but as text - a printed page full
+   * of bordered boxes and dropdown chevrons is a screenshot, and nobody can
+   * press it. */
+  /* The add form goes on paper, and so does the line that reports a failed
+     add: a sentence about a control that is not printed is a dangling
+     reference. */
+  .bucket-add, .bucket-add-status, .group-new, .types-toolbar, .undo-strip,
+  .confirm-strip,
+  .proposal-bar, .bucket-head-actions, .bucket-new, .types-blocked,
+  .bucket-filter,
+  .group-foot button, .member-row td.right button, .bucket-scope-tag .check
+  { display: none !important; }
+
+  /* BUT THE FILTER'S OWN SENTENCE STAYS. The controls go because paper
+   * cannot be typed into; the line saying "Showing 3 of 11 buckets" is
+   * STATE, and a printed page that quietly holds three of eleven rows with
+   * nothing on it to say so is a record of the wrong thing. */
+  .filter-note:not([hidden]) { display: block !important; font-weight: 600; }
+
+  /* The alert above a list STAYS on paper - a printed record of settings
+   * that failed to load must say so, or it is a record of nothing that looks
+   * like a record of something. Only its button goes: paper cannot retry. */
+  .settings-alert button { display: none !important; }
+
+  .settings-columns { grid-template-columns: minmax(0, 1fr); }
+  .group-row, .bucket-card { break-inside: avoid; }
+
+  /* Every group open on paper: a disclosure is a way of not showing
+   * something to somebody who can still press it, and a printed page cannot
+   * be pressed. Two rules for one job - `::details-content` is what a
+   * current Chromium hides a closed <details> with, and the display rule is
+   * the older browsers' half. */
+  .group-details::details-content { content-visibility: visible !important; }
+  .group-details > .group-body { display: grid !important; }
+  .group-summary::before { display: none; }
+
+  /* On paper the group's name is already the heading of its own block, the
+   * captions are three words each and the foot holds only controls - so what
+   * is left under the name is the two facts a printed record needs: the
+   * colour and what belongs in the group. */
+  .group-name-field, .group-body .field-label, .group-foot,
+  #group-list-help { display: none !important; }
+
+  .group-name, .group-hex, .group-description, .type-group, .bucket-rename {
+    border: 0 !important;
+    background: transparent !important;
+    padding-left: 0 !important;
+    -webkit-appearance: none;
+    appearance: none;
+    min-height: 0 !important;
+    height: auto;
+    resize: none;
+  }
+  /* A colour is a swatch on paper; the picker's chrome is not. */
+  .group-colour { display: none; }
+  .group-hex { font-family: var(--mono); }
+}
+
+/* The form answers here when it has something to answer. Empty - which is
+ * how it starts now - it takes no line: what a new group is was a sentence
+ * read once, and it is in the page's About disclosure. */
+#group-new-status:empty { display: none; }
+
+/* ── The toolbar rule, on both settings pages ─────────────────────────────
+ *
+ * The defect this prevents: within one row the label at the bottom, its
+ * input centred, the button at the bottom, one group higher than the rest
+ * and the checkboxes lower.
+ *
+ * The rule, so it is not a matter of taste:
+ *
+ *   * every control in a row is the same height (--control-h) and their
+ *     boxes share a common top and bottom edge;
+ *   * a label sits ABOVE its control, never beside one control and above
+ *     another in the same row - all labels share one baseline, all controls
+ *     the next;
+ *   * a group WITHOUT a label still occupies the label row, so it cannot
+ *     float up and sit higher than its neighbours (this is exactly what
+ *     happened to the checkbox group);
+ *   * buttons that act on the row sit ON the control baseline, not below it;
+ *   * the order is always: what is searched, then how it is narrowed, then
+ *     the action.
+ *
+ * `align-items: stretch` with `justify-content: flex-end` inside each cell
+ * is what enforces it: every cell is as tall as the row, and its control is
+ * pinned to the bottom of it - so equal-height controls end up with one top
+ * edge and one bottom edge whether their label wraps or not.
+ *
+ * A NEW CLASS, not a restyle of `.toolbar`: this file is loaded on two pages
+ * and the shared class belongs to app.css - which now carries the same rule
+ * for every view, computing an unlabelled cell's top margin from --label-h.
+ * The two agree and cannot double up: app.css only adds that margin to a
+ * cell with NO label element, and every cell here has one (an empty one in
+ * the action cells). This block stays as the scoped, `:has()`-free floor for
+ * the two settings pages, and tests/ui/test_bucket_kinds_view.py's
+ * `test_every_control_in_a_toolbar_row_lines_up` is what proves either of
+ * them works: if the shared rule alone keeps both pages aligned at both
+ * viewports, this block can go.
+ */
+.settings-toolbar { align-items: stretch; }
+.settings-toolbar > .field,
+.settings-toolbar > .typeahead {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 0.25rem;
+  min-width: 0;
+}
+/* The label row exists even when it is empty. `min-height` rather than a
+ * non-breaking space: a space would be read out. */
+.settings-toolbar .field-label {
+  display: block;
+  /* --label-h, not a number: app.css computes the margin that puts an
+   * unlabelled cell on the control baseline from the same variable, and a
+   * label row that is 1.25rem here and 1.5rem there is how two toolbars on
+   * two pages stop lining up with each other. */
+  min-height: var(--label-h);
+  line-height: var(--label-h);
+}
+.settings-toolbar input[type="text"],
+.settings-toolbar input[type="search"],
+.settings-toolbar input[type="color"],
+.settings-toolbar select,
+.settings-toolbar .button {
+  min-height: var(--control-h);
+  height: var(--control-h);
+}
+/* A group of checkboxes or radios is one control for the purposes of the
+ * row: it is as tall as a field and its contents are centred in it. */
+.settings-toolbar .field > .row,
+.settings-toolbar > .check {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0 0.75rem;
+  min-height: var(--control-h);
+}
+/* The action cell: no label of its own, so it borrows the label row's height
+ * and puts its button on the control baseline. */
+.settings-toolbar .field--action { flex: 0 0 auto; }
+.settings-toolbar .field--action .field-label { pointer-events: none; }
+
+.bucket-kind-field { flex: 0 1 12rem; }
+.bucket-filter { margin: 0 0 0.5rem; }
+/* `:not(.field--action)`, or the Clear button would stretch across whatever
+ * the search box leaves: the action cell is as wide as its button and no
+ * wider, on every toolbar in the product. */
+.bucket-filter .field:not(.field--action) { flex: 1 1 16rem; }
+
+/* A SET FILTER IS STATE AND MAY NOT BE HIDDEN. The line is only there when
+ * the list is showing less than everything, and then it says how much less. */
+.filter-note {
+  margin: 0 0 var(--gap);
+  color: var(--text);
+  font-weight: 500;
+}
+
+/* What a bucket is about, beside where it applies. Quieter than the scope
+ * tag, because the kind cannot be changed and the scope can. */
+.tag--kind {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+
+.types-filter-field { flex: 0 1 auto; }

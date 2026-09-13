@@ -1,0 +1,547 @@
+{#- The watched-page editor: four steps that read as a sentence - where to
+    look, what the page answers, what to collect, how often.
+
+    THE ORDER IS THE ORDER THE WORK IS DONE IN. A test in the last card,
+    with the card before it telling the reader to "run the test in step 3
+    first" in order to do step 2, is a form read backwards. The test is
+    step 2, because that is when it happens: paste an address, see what
+    comes back, and only then decide what counts as a document.
+
+    ONE STEP AT A TIME, AND NOTHING HIDDEN THAT CAN BE DONE. A step that
+    cannot be taken yet is folded and says why in one sentence; it unfolds
+    by itself the moment it can be taken, and a reader who wants to look
+    anyway can always open it by hand. Steps already taken stay open - the
+    page is the record of what was decided, and collapsing that under
+    somebody would hide the answer they are checking.
+
+    SAVING, DELETING AND GOING BACK ARE NEVER FOLDED. They live in a row of
+    their own under the steps and in two links outside the form, because
+    "how do I get out of here" must never depend on how far somebody got.
+
+    NO REGULAR EXPRESSION IS VISIBLE UNTIL IT IS ASKED FOR. A pattern is
+    shown as its human label - /rent/# - with how many links of the last
+    test it explains. The regex is one disclosure away, because it answers
+    "why did it take THAT one" and nothing else.
+
+    TEST AND SAVE ARE TWO DIFFERENT ACTS AND LOOK IT. Test fetches the
+    site; Save writes the configuration and fetches nothing. A saved page
+    is switched OFF until somebody enables it, and the row says so in the
+    line above the button rather than in a manual.
+
+    Variables from routers/pages.py: source_id (None on /sources/new).
+-#}
+{% extends "_layout.html" %}
+{#- The info icon beside a label and the bubble it opens. Every explanation in
+    step 4 is one of these: twenty permanently visible grey sentences under
+    twenty controls is twenty things to read past, every time, for ever, and
+    the sentence is wanted at the moment of doubt. static/js/hints.js opens
+    them on hover, on click and on keyboard focus - never hover alone, which is
+    the rule this product states in four other places. -#}
+{% from "_macros.html" import help_icon, help_text %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ static('css/sources.css') }}">
+{% endblock %}
+
+{% macro step_head(number, title, id) -%}
+    {#- The head is the toggle. The number is decoration - a screen reader
+        already knows this is heading 2 of 4 - and the state chip is inside
+        the button so it is read out with the name it belongs to. -#}
+    <div class="step-head">
+      <span class="step-number" aria-hidden="true">{{ number }}</span>
+      <h2 class="step-title" id="{{ id }}-title">
+        <button type="button" class="step-toggle" aria-expanded="true"
+                aria-controls="{{ id }}-body">
+          <span class="step-name">{{ title }}</span>
+          <span class="step-state" data-step-state hidden></span>
+          <span class="step-chevron" aria-hidden="true"></span>
+        </button>
+      </h2>
+    </div>
+    <p class="step-locked" data-step-locked hidden></p>
+{%- endmacro %}
+
+{% block content %}
+<div class="page-header">
+  <h1 id="editor-title">{{ "New watched page" if source_id is none else "Watched page" }}</h1>
+  <details class="page-about">
+    <summary>About this page</summary>
+    <div class="page-about-body">
+      <p class="page-purpose">Where to look, what the page answers, what to collect and how often. The dashboard fetches the site only when you press <em>Test this configuration</em>; saving fetches nothing.</p>
+      <p>The four steps are in the order they are done, and each one opens when it can be taken. Saving, deleting and going back work at any point.</p>
+    </div>
+  </details>
+</div>
+
+{#- THE WAY BACK, TWICE: once here and once under the save row.
+    A watched page is a long form - four steps, a test, a picker and a save
+    row - and the Watchlist is where a reader came from and where they go
+    next. One link at the top is a link somebody has to scroll up to find
+    after working their way down; one at the bottom is a link somebody has to
+    scroll past the whole form to reach on arrival. Both is what the length of
+    this page costs.
+
+    A link and not a button, so the middle click, the context menu and "open
+    in a new tab" all work - and so the unsaved-changes guard in
+    static/js/sources.js catches it, which it does by watching links. -#}
+<p class="editor-back editor-back--top">
+  <a class="button button--secondary" href="/sources" data-back-to-watchlist>Back to the Watchlist</a>
+</p>
+
+{#- The form's own error, in the same shape as the verdict banners two
+    cards below: an icon, a heading that says what happened, and a sentence
+    that says what to do. Two kinds of message about the same page that
+    look like two different systems are two things to learn instead of one.
+    sources.js empties it on the next keystroke - a sentence that outlives
+    the fault it describes is worse than no sentence, and role=status makes
+    a screen reader read it out again. -#}
+<div class="notice notice--error verdict" id="editor-error" role="status" hidden>
+  <span class="verdict-icon" aria-hidden="true">⛔</span>
+  <p class="verdict-title" id="editor-error-title"></p>
+  <p class="verdict-text" id="editor-error-text"></p>
+  {#- The way out, in the box that says there is a problem. A page whose
+      only heading is "Watched page" and whose <main> holds no link at all
+      is a dead end; the one failure that ends there - the id is gone -
+      fills this row with "Back to the Watchlist". -#}
+  <div class="verdict-actions" id="editor-error-actions" hidden></div>
+</div>
+
+<form class="editor-form" id="source-form" novalidate
+      data-source-id="{{ source_id if source_id is not none else '' }}">
+
+  <!-- ── 1 Where to look ─────────────────────────────────────────────── -->
+  <section class="card step-card" data-step="1" aria-labelledby="step1-title">
+    {{ step_head(1, "Where to look", "step1") }}
+    <div class="step-body" id="step1-body">
+    <p class="step-purpose">The address of the page that lists the documents - a search result, a news list, a register. Not the documents themselves.</p>
+
+    <div class="field-row">
+      <div class="field">
+        <label class="field-label" for="f-name">Name</label>
+        <input type="text" id="f-name" name="text_name" maxlength="200" required
+               autocomplete="off" aria-describedby="f-name-help">
+        <small class="field-help" id="f-name-help">What you will recognise it by in the list and in the log.</small>
+      </div>
+
+      <div class="field field--wide">
+        <label class="field-label" for="f-list-url">Address of the list page</label>
+        <input type="url" id="f-list-url" name="text_list_url" required
+               autocomplete="off" spellcheck="false"
+               placeholder="https://example.com/news" aria-describedby="f-list-url-help">
+        <small class="field-help" id="f-list-url-help">Starts with http:// or https://. Paste the address from the browser's address bar.</small>
+      </div>
+    </div>
+
+    {#- THE PROJECTS, AND THERE MAY BE SEVERAL.
+        A project decides what is extracted from a document - its objects of
+        interest and its perspectives - so two projects asking different
+        questions of the same page are two extractions. The page is fetched
+        once and read once per project, and the line under the list says so
+        in money terms before anybody adds a second one.
+
+        A button and a dialog rather than a row of controls here: choosing
+        projects and a key for each is a job of its own, and doing it in a
+        panel that also holds the address makes both harder to see. -#}
+    <div class="project-block">
+      <h3 class="field-label" id="projects-label">Projects this page collects into</h3>
+      <ul class="project-list" id="project-list" aria-describedby="projects-help"></ul>
+      <p class="empty" id="projects-empty">No project yet. A watched page collects into at least one - that is what decides how its documents are read.</p>
+      <div class="project-actions">
+        <button type="button" class="button button--primary-quiet" id="configure-projects"
+                disabled>Configure projects…</button>
+        <a class="button button--secondary" id="projects-manage" href="#">Manage keys in Xtracting</a>
+      </div>
+      <p class="field-help" id="projects-help">
+        Each project reads this page separately, with its own objects of interest
+        and its own perspectives - and is charged separately. The page itself is
+        fetched once however many projects read it.
+      </p>
+      <p class="field-note" id="projects-none" hidden>
+        The list is empty because the crawler has no working key yet, so it has
+        found no project.
+      </p>
+      {#- The old free-typed label. Kept and read-only so a watchlist made
+          before keys had prefixes still says what it was configured against. -#}
+      <input type="hidden" name="text_key_label" id="f-key-label">
+    </div>
+
+    <fieldset class="choice-list" id="engine-choices">
+      <legend class="field-label">How the page is read</legend>
+      <label class="choice">
+        <input type="radio" name="text_engine" value="http" checked>
+        <span class="choice-label">HTTP</span>
+        <span class="choice-consequence">Reads the page as the server delivers it. Right for most sites, and far quicker.</span>
+      </label>
+      <label class="choice">
+        <input type="radio" name="text_engine" value="playwright">
+        <span class="choice-label">Rendered</span>
+        <span class="choice-consequence">Runs the page in a browser first. Choose Rendered when the test finds no links - some sites build their list with JavaScript.</span>
+      </label>
+    </fieldset>
+
+    <details class="rule-detail" id="render-settings">
+      <summary>Waiting rules for Rendered mode</summary>
+      <div class="field-row">
+        <div class="field">
+          <label class="field-label" for="f-wait-selector">Wait for this element</label>
+          <input type="text" id="f-wait-selector" name="text_wait_for_selector"
+                 autocomplete="off" spellcheck="false" placeholder=".result-list a">
+          <small class="field-help">A CSS selector the list needs before it is complete. Leave empty unless the test comes back short.</small>
+        </div>
+        <div class="field">
+          <label class="field-label" for="f-wait-ms">Then wait (milliseconds)</label>
+          <input type="number" id="f-wait-ms" name="integer_wait_after_load_ms" min="0" max="60000" step="100" value="0">
+        </div>
+      </div>
+    </details>
+    </div>
+  </section>
+
+  <!-- ── 2 What the page answers ─────────────────────────────────────── -->
+  <section class="card step-card" data-step="2" aria-labelledby="step2-title">
+    {{ step_head(2, "What the page answers", "step2") }}
+    <div class="step-body" id="step2-body">
+    <p class="step-purpose">The test reads the list page once, from this dashboard, and reports what the site said. It writes nothing, sends nothing to Xtracting and costs nothing.</p>
+
+    <div class="test-row">
+      <button type="button" class="button button--test" id="run-test">Test this configuration</button>
+      <button type="button" class="button button--secondary" id="run-file-test" hidden>Look for files as well</button>
+      <span class="field-help" id="test-hint">One test runs at a time, so the site sees one visitor.</span>
+    </div>
+
+    <p class="progress-line" id="test-progress" role="status" data-running="false"></p>
+    <div class="verdicts" id="verdicts"></div>
+
+    {#- THE ROW HAS TO ADD UP. "Links found 31 / Would be collected 20 /
+        Rejected 10" left one link unaccounted for, and the only way to find
+        out what it was was to open the picker, where a "Paging links" group
+        stood on its own. The two classes that a page has and that are not
+        documents now have cells of their own, in the picker's own words, so
+        collected + rejected + paging + this page = found on every screen.
+        Both are hidden while they are zero: a cell that reads 0 on
+        every ordinary list page is noise, and sources.js shows them the
+        moment they carry something.
+
+        "Files fetched" is the number of files the test actually READ - it
+        only moves after "Look for files as well". Headed "Files seen", next
+        to a link classified as a file, it would read 0 and confuse. -#}
+    <dl class="result-summary" id="result-summary" hidden>
+      <div><dt>Links found</dt><dd data-count="links">-</dd></div>
+      <div><dt>Would be collected</dt><dd data-count="accepted">-</dd></div>
+      <div><dt>Rejected</dt><dd data-count="rejected">-</dd></div>
+      <div data-cell="pagination" hidden><dt>Paging links</dt><dd data-count="pagination">-</dd></div>
+      <div data-cell="list_self" hidden><dt>This page itself</dt><dd data-count="list_self">-</dd></div>
+      <div><dt>List pages read</dt><dd data-count="pages">-</dd></div>
+      <div data-cell="files" hidden><dt>Files fetched</dt><dd data-count="files">-</dd></div>
+    </dl>
+    {#- What the SAVED rules do with the links of that same test. Nothing is
+        fetched for it (/api/sources/{id}/preview re-applies the rules to the
+        snapshot), so "did my change help?" is answered without a second
+        visit to the site. -#}
+    <p class="field-help" id="preview-note" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <!-- ── 3 What to collect ───────────────────────────────────────────── -->
+  <section class="card step-card" data-step="3" aria-labelledby="step3-title">
+    {{ step_head(3, "What to collect", "step3") }}
+    <div class="step-body" id="step3-body">
+    <p class="step-purpose">Which of the links the test found are documents. This is the decision the whole watched page rests on.</p>
+
+    {#- THE MOST IMPORTANT BUTTON ON THE PAGE, AND IT LOOKS IT.
+        Not a secondary button at the bottom of the card, under a block of
+        rules, next to a second button about files - which is where a reader
+        looks last, for the thing they have to do first. It is the first
+        thing in the step, filled, and full width at the top: the step is
+        called "what to collect" and this is how one collects. -#}
+    <div class="picker-lead">
+      <button type="button" class="button button--primary-pick" id="open-links"
+              aria-describedby="picker-hint" disabled>Choose the links…</button>
+      <p class="field-help" id="picker-hint">Shows what the last test found. Run the test in step 2 first.</p>
+    </div>
+
+    <fieldset class="choice-list" id="mode-choices">
+      <legend class="field-label">Which links count</legend>
+      <label class="choice">
+        <input type="radio" name="text_mode" value="selected" checked>
+        <span class="choice-label">Selected links</span>
+        <span class="choice-consequence">Only links shaped like the ones you tick in the test. A link of a new shape is left alone until you say otherwise.</span>
+      </label>
+      <label class="choice">
+        <input type="radio" name="text_mode" value="all_except_rejected">
+        <span class="choice-label">Everything except what I reject</span>
+        <span class="choice-consequence">Every link on the list page, minus the shapes you reject and minus imprint pages, images and paging links. A new kind of link is collected without asking.</span>
+      </label>
+      <label class="choice">
+        <input type="radio" name="text_mode" value="exact">
+        <span class="choice-label">Exact addresses</span>
+        <span class="choice-consequence">Only the addresses you name, read again whenever their text changes. Links found on them are not followed.</span>
+      </label>
+    </fieldset>
+
+    <fieldset class="choice-list" id="format-choices">
+      <legend class="field-label">What is sent for each document</legend>
+      <label class="choice">
+        <input type="radio" name="text_format" value="plain" checked>
+        <span class="choice-label">Plain text</span>
+        <span class="choice-consequence">The text of the page with menus, footers and scripts stripped away.</span>
+      </label>
+      <label class="choice">
+        <input type="radio" name="text_format" value="html">
+        <span class="choice-label">HTML</span>
+        <span class="choice-consequence">The cleaned HTML, so tables and headings keep their shape. Three to ten times as many characters as plain text.</span>
+      </label>
+    </fieldset>
+    <p class="field-help" id="format-cost" aria-live="polite"></p>
+
+    <div class="switch-row">
+      <label class="check"><input type="checkbox" id="f-sub-sub" name="bool_sub_sub"
+             aria-describedby="f-sub-sub-hint"> Also collect files linked on each document page{{ help_icon("f-sub-sub") }}</label>
+      {% call help_text("f-sub-sub") %}Each document page is looked at a second time, for files worth reading. Every file that is found and read is a document of its own: it is extracted and charged like any other, so a page linking ten attachments is eleven extractions rather than one.{% endcall %}
+      <p class="switch-note">PDF, Word, Excel, CSV and text files are read and their text is sent. Which types, and which single files, is chosen in <em>Choose the files</em> below.</p>
+      <div class="picker-button">
+        <button type="button" class="button button--secondary" id="open-files"
+                aria-describedby="files-hint" disabled>Choose the files…</button>
+        <span class="field-help" id="files-hint">Files are not collected for this watched page. Tick <em>Also collect files</em> above to change that.</span>
+      </div>
+    </div>
+
+    <div class="rules-block">
+      <h3>The links this watched page keeps</h3>
+      <p class="field-help" id="rules-help">Learned from the links you tick in the test. Nothing here is fetched; a rule only decides what a crawl would take.</p>
+
+      <div data-rules-group="accept">
+        <h4 class="field-label">Kept</h4>
+        <ul class="rule-chips" id="accept-chips" aria-describedby="rules-help"></ul>
+        <p class="empty" id="accept-empty">Nothing is collected yet. Press <em>Choose the links</em> above and select the links that lead to something worth collecting - the shapes of their addresses become the rules listed here.</p>
+      </div>
+
+      <div data-rules-group="reject">
+        <h4 class="field-label">Rejected</h4>
+        <ul class="rule-chips" id="reject-chips"></ul>
+        <p class="empty" id="reject-empty">Nothing rejected by shape.</p>
+      </div>
+
+      <div data-rules-group="exact" id="exact-block">
+        <h4 class="field-label">Single addresses</h4>
+        <ul class="rule-chips" id="exact-chips"></ul>
+        <p class="empty" id="exact-empty">No single addresses. In <em>Exact addresses</em> mode this is the whole configuration.</p>
+        {#- A <div>, not a second <form>: a form inside a form is invalid
+            HTML and the browser silently drops the inner one, which took an
+            afternoon to find. Enter in the field is caught by sources.js
+            and adds the address instead of saving the watched page. -#}
+        <div class="manual-pattern toolbar" id="exact-add">
+          <div class="field field--wide">
+            <label class="field-label" for="f-exact-url">Add one address</label>
+            <input type="url" id="f-exact-url" autocomplete="off" spellcheck="false"
+                   placeholder="https://example.com/news/2026-03-14-decision">
+          </div>
+          <div class="field">
+            <label class="field-label" for="f-exact-kind">Then</label>
+            <select id="f-exact-kind">
+              <option value="monitor">watch this address</option>
+              <option value="reject">never collect it</option>
+            </select>
+          </div>
+          <button type="button" class="button button--secondary" id="exact-add-button">Add</button>
+          <p class="manual-verdict" id="exact-verdict" aria-live="polite"></p>
+        </div>
+      </div>
+    </div>
+    </div>
+  </section>
+
+  <!-- ── 4 When and how often ────────────────────────────────────────── -->
+  <section class="card step-card" data-step="4" aria-labelledby="step4-title">
+    {{ step_head(4, "When and how often", "step4") }}
+    <div class="step-body" id="step4-body">
+    <p class="step-purpose">How often the crawler comes back, how gently, and what it does about the site's own rules. Every answer here has a working default.</p>
+
+      {#- THREE SUBSECTIONS, EACH WITH A NAME AND A RULE ABOVE IT.
+          Step 4 asked about ten things in three unrelated groups - a rhythm, a
+          reach and the law - as one undivided run of controls, and the eye read
+          it as ten settings of equal weight. A heading with a hairline above it
+          is the cheapest thing that says "a new subject starts here", and it is
+          what the numbers, the ticks and the robots half each get. -#}
+      <h3 class="step-section">How often, and how gently</h3>
+
+      <div class="field-row">
+        <div class="field">
+          <label class="field-label" for="f-interval">Look again every (minutes){{ help_icon("f-interval") }}</label>
+          <input type="number" id="f-interval" name="integer_interval_minutes" min="1" max="43200" step="10" value="360"
+                 aria-describedby="f-interval-hint">
+          {% call help_text("f-interval") %}How long the crawler waits before reading this list page again - 360 is six hours. Set it far under the rate the site really publishes at and nearly every visit finds nothing new, which is traffic the site pays for and nothing gained here.{% endcall %}
+        </div>
+        <div class="field">
+          <label class="field-label" for="f-politeness">Seconds between two requests{{ help_icon("f-politeness") }}</label>
+          <input type="number" id="f-politeness" name="integer_politeness_seconds" min="0" max="3600" step="1" value="6"
+                 aria-describedby="f-politeness-hint">
+          {% call help_text("f-politeness") %}Six seconds is a visitor reading. The site's own <code>Crawl-delay</code> wins when it asks for more. At 0 the crawler fetches as fast as the site answers, which is how a watched page gets its address blocked.{% endcall %}
+        </div>
+        <div class="field">
+          <label class="field-label" for="f-max-pages">Most list pages per run{{ help_icon("f-max-pages") }}</label>
+          <input type="number" id="f-max-pages" name="integer_max_pages" min="1" max="1000" step="1" value="10"
+                 aria-describedby="f-max-pages-hint">
+          {% call help_text("f-max-pages") %}How deep into the site's own paging one run goes before it stops. Too low and entries that have moved past the first pages are never reached; too high and every run walks the whole back catalogue of the site again.{% endcall %}
+        </div>
+        <div class="field">
+          <label class="field-label" for="f-max-new">Most new documents per run{{ help_icon("f-max-new") }}</label>
+          <input type="number" id="f-max-new" name="integer_max_new_per_run" min="1" max="1000" step="1" value="25"
+                 aria-describedby="f-max-new-hint">
+          {% call help_text("f-max-new") %}The ceiling on documents sent for extraction in one run. Each of them is extracted once per project and charged for, so this is the number that decides what a single run can cost - and the reason a first crawl of a large site does not arrive as a surprise invoice.{% endcall %}
+        </div>
+        <div class="field">
+          <label class="field-label" for="f-timeout">Seconds to wait for a page{{ help_icon("f-timeout") }}</label>
+          <input type="number" id="f-timeout" name="integer_timeout_seconds" min="1" max="600" step="1" value="30"
+                 aria-describedby="f-timeout-hint">
+          {% call help_text("f-timeout") %}How long one request may take before the crawler gives up on it and moves to the next address. Too short and a merely slow site is written down as unreachable; too long and one page that never answers delays the whole run.{% endcall %}
+        </div>
+      </div>
+
+      <h3 class="step-section">What a crawl may follow</h3>
+
+      <div class="switch-row">
+        <label class="check"><input type="checkbox" id="f-follow-pagination" name="bool_follow_pagination" checked
+               aria-describedby="f-follow-pagination-hint"> Follow the list's own pages{{ help_icon("f-follow-pagination") }}</label>
+        {% call help_text("f-follow-pagination") %}Lets the crawler walk from page 1 to page 2 and onwards, as far as the list-page ceiling above. Switched off, only the first list page is ever read, so anything that has moved off it is never collected.{% endcall %}
+        <label class="check"><input type="checkbox" id="f-same-host" name="bool_same_host_only" checked
+               aria-describedby="f-same-host-hint"> Stay on this site{{ help_icon("f-same-host") }}</label>
+        {% call help_text("f-same-host") %}Only addresses on the same host as the list page are collected. Switched off, a single link to somewhere else can take the crawl to a site nobody chose to watch - and what it finds there is extracted and charged just the same.{% endcall %}
+        <label class="check"><input type="checkbox" id="f-drop-legal" name="bool_drop_legal_links" checked
+               aria-describedby="f-drop-legal-hint"> Skip imprint, terms and privacy pages{{ help_icon("f-drop-legal") }}</label>
+        {% call help_text("f-drop-legal") %}They are recognised by their addresses and left alone. They sit on every page of a site and they never change, so each one collected is an extraction paid for a document nobody asked about.{% endcall %}
+        <label class="check"><input type="checkbox" id="f-resubmit" name="bool_resubmit_on_change"
+               aria-describedby="f-resubmit-hint"> Send a document again when its text changes{{ help_icon("f-resubmit") }}</label>
+        {% call help_text("f-resubmit") %}The crawler remembers the text it sent and compares. Switched on, a corrected article is extracted a second time and charged a second time; switched off, the archive keeps the version it saw first.{% endcall %}
+      </div>
+
+      {#- The legal half. A CHECK in the database refuses the row without a
+          written reason, and this is where that sentence is written; the
+          field appears the moment the tick comes off, so nobody discovers
+          the requirement from an error message.
+
+          A PLAIN SECTION, NOT A FIELDSET. A `fieldset.choice-list` whose
+          only non-checkbox child is its own `<legend>` draws "The site's own
+          rules" as the name of a control group with one control in it - a
+          heading that reads as a broken form. It is a heading, like
+          the two above it, and the id stays because sources.js and the browser
+          tests find the block by it. -#}
+      <h3 class="step-section">The site's own rules</h3>
+
+      <div class="switch-row" id="robots-block">
+        <label class="check"><input type="checkbox" id="f-respect-robots" name="bool_respect_robots" checked
+               aria-describedby="f-respect-robots-hint"> Follow this site's robots.txt{{ help_icon("f-respect-robots") }}</label>
+        {% call help_text("f-respect-robots") %}The crawler reads the site's robots.txt before it fetches anything and stays out of what it forbids. Taking this off needs a written reason in the field that appears - the archive refuses to store the watched page without one.{% endcall %}
+        {#- NOT A HINT, AND NOT A REMARK UNDER THE TICK. This is the law, and it
+            is true whichever way the tick is set, so it may not live behind an
+            info icon that a reader opens only when they are unsure about the
+            control. An Info callout says it once, in the open, in the box this
+            product uses for "something you have to know that is not a
+            problem". -#}
+        <p class="notice notice--info"><span class="notice-icon" aria-hidden="true">&#9432;</span><span>Permission from robots.txt is not a licence: it says what a program may fetch, not what may be done with the text.</span></p>
+        <div class="field" id="override-field" hidden>
+          <label class="field-label" for="f-override">Why this page may be crawled anyway</label>
+          <textarea id="f-override" name="text_override_reason" rows="2"
+                    placeholder="Written permission of the site owner, ticket 1234"></textarea>
+          <small class="field-help">Who allowed it, and when. The database refuses to store it without this sentence.</small>
+        </div>
+      </div>
+
+      <details class="rule-detail" id="advanced">
+        <summary>Paging and the part of a page that is the document</summary>
+        <div class="field-row">
+          <div class="field">
+            <label class="field-label" for="f-paging-param">Paging parameter</label>
+            <input type="text" id="f-paging-param" name="text_paging_param" autocomplete="off" spellcheck="false"
+                   aria-describedby="f-paging-help">
+            <small class="field-help" id="f-paging-help">Learned from the test, for example <code>page</code> or <code>currentPage</code>.</small>
+          </div>
+          <div class="field">
+            <label class="field-label" for="f-next-selector">Or a "next page" element</label>
+            <input type="text" id="f-next-selector" name="text_next_selector" autocomplete="off" spellcheck="false" placeholder="a[rel=next]">
+          </div>
+          <div class="field">
+            <label class="field-label" for="f-content-selector">Only this part of a document page</label>
+            <input type="text" id="f-content-selector" name="text_content_selector" autocomplete="off" spellcheck="false" placeholder="main article">
+          </div>
+          <div class="field">
+            <label class="field-label" for="f-drop-selectors">Drop these parts</label>
+            <input type="text" id="f-drop-selectors" name="text_drop_selectors" autocomplete="off" spellcheck="false" placeholder=".ads, .related">
+          </div>
+        </div>
+      </details>
+
+      <div class="field">
+        <label class="field-label" for="f-notes">Notes</label>
+        <textarea id="f-notes" name="text_notes" rows="2" placeholder="Anything the next person should know about this watched page."></textarea>
+      </div>
+    </div>
+  </section>
+
+  {#- ALWAYS HERE, NEVER FOLDED. Whatever step somebody is on and whatever
+      is or is not filled in, the three answers to "am I finished" are on
+      screen: keep it, throw it away, or leave. A row of its own rather than
+      the tail of the last card, because it is not part of step 4 - it is
+      what one does with all four. -#}
+  <div class="card action-bar">
+    <div class="action-bar-said">
+      <p class="save-state" id="save-state" role="status"></p>
+      <p class="field-help" id="enable-help">A saved watched page is switched off until it is enabled. Nothing is crawled on a schedule before that.</p>
+    </div>
+    <div class="action-bar-buttons">
+      <label class="enable-check" id="enable-box" hidden>
+        <input type="checkbox" id="f-enabled">
+        <span id="enable-label">Crawl on a schedule</span>
+      </label>
+      <button type="button" class="button button--quiet button--remove" id="delete-source" hidden>Delete this watched page</button>
+      <button type="submit" class="button button--primary-save" id="save-source">Save as configuration</button>
+    </div>
+  </div>
+  <div class="notice notice--error enable-refusal" id="enable-refusal" hidden></div>
+</form>
+
+{#- ── After the four steps: prove it on one real document ──────────────
+    Not a step, because it is not part of configuring: it is what one does
+    with a configuration that is finished. It really crawls, really submits
+    and really costs, which is why it is a card of its own with the price in
+    the sentence above the button rather than a fifth number in a sequence
+    somebody is working through. -#}
+<section class="card real-run" id="real-run" hidden aria-labelledby="real-run-title">
+  <h2 class="step-title" id="real-run-title">Try it on one real document</h2>
+  <p class="step-purpose">
+    Crawls this page for real, takes the first address the project has not had
+    yet, and submits it to Xtracting straight away - without waiting for the
+    crawler's schedule, and even while the crawler's switch is off.
+    <strong>This costs: every document sent is an extraction, once per project.</strong>
+  </p>
+  <div class="test-row">
+    <button type="button" class="button button--test" id="run-real">Crawl and send one document</button>
+    <div class="field">
+      <label class="field-label" for="f-real-project">For</label>
+      <select id="f-real-project">
+        <option value="">every project of this page</option>
+      </select>
+    </div>
+    <span class="field-help" id="real-run-hint">Save the watched page first - a run needs something to read.</span>
+  </div>
+  <p class="progress-line" id="real-progress" role="status" data-running="false"></p>
+  <div class="verdicts" id="real-verdicts"></div>
+  <ol class="real-documents" id="real-documents"></ol>
+</section>
+
+{#- The second one, and OUTSIDE the form: inside it a link would sit in the
+    row that saves, one tab stop from the button that keeps the work, and the
+    two answers to "am I finished here" would look like one control with two
+    halves. Under the form it is what it is - the way out, after everything
+    the page asks for. -#}
+<p class="editor-back editor-back--bottom">
+  <a class="button button--secondary" href="/sources" data-back-to-watchlist>Back to the Watchlist</a>
+</p>
+
+{% include "partials/link_row.html" %}
+{% include "partials/file_row.html" %}
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="{{ static('js/sources.js') }}"></script>
+{% endblock %}

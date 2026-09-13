@@ -1,0 +1,298 @@
+{#- The frame every view sits in.
+
+    Blocks a view fills:
+      title      the <title> and the h1 (routers/pages.py passes `title`)
+      head       extra stylesheets (map.css, graph.css) - after app.css
+      content    the page, inside <main class="main">
+      scripts    the view's module script(s) - after layout.js
+
+    What the layout owns: the skip link, the top bar (text-labelled nav,
+    project + language selector, the perspective filter, Print, Export), the
+    print header line, the footer with the version, and the shared scripts.
+    Every selector is server-rendered with what the archive has, so the page
+    is correct before any JavaScript runs; layout.js keeps it in step
+    afterwards.
+
+    Variables from routers/pages.py: view, title, views, ctx, projects,
+    perspectives, importances, default_min_importance, filter_applies,
+    diagram_scopes, app_version.
+-#}
+{%- from "_macros.html" import print_export_buttons, icon -%}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>{% block title %}{{ title }}{% endblock %} - Xtracting archive</title>
+  <link rel="stylesheet" href="{{ static('css/app.css') }}">
+  <link rel="stylesheet" href="{{ static('css/typeahead.css') }}">
+  <link rel="stylesheet" href="{{ static('css/print.css') }}" media="print">
+  {#- An empty data: icon, so the browser does not ask for /favicon.ico on
+      every page and log a 404 - the UI tests fail on console errors. -#}
+  <link rel="icon" href="data:,">
+  {#- WHERE XTRACTING ITSELF IS. This archive is one half of a pair - the
+      extraction runs there and the results land here - and several answers on
+      these pages are only actionable over there. It is a setting
+      (DASHBOARD_XTRACTING_URL) because a customer on their own installation
+      is not on xtracting.io; static/js/icons.js reads it from here, and falls
+      back to the public address when the app is rendered without its
+      configuration (a template test). -#}
+  <meta name="xtracting-url" content="{{ request.app.state.cfg.xtracting_url if request.app.state.cfg is defined else '' }}">
+  {% block head %}{% endblock %}
+</head>
+{#- THE SERVER'S RESOLVED CHOICE, ON THE BODY. The perspective may come from
+    a cookie rather than from the URL, and layout.js mirrors it into the URL
+    and the state from here - so a nav link, an API call and an Export URL
+    all carry what the page is actually showing rather than an empty
+    filter. The same job /api/projects does for the pair. -#}
+<body data-view="{{ view }}" data-project="{{ ctx.project }}" data-language="{{ ctx.language }}"
+      data-perspective="{{ ctx.perspective }}" data-min-importance="{{ ctx.min_importance }}">
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="topbar-brand" href="/">Xtracting <small>archive</small></a>
+
+      {#- THE FIRST CONTROL ROW A READER MEETS IS HELD TO THE TOOLBAR RULE.
+          It carries `.toolbar`, so tests/ui/test_toolbar_alignment.py
+          measures it like the ten underneath it: label above control, one
+          height, one top edge - and the Print/Export group takes the label
+          row as an empty cell rather than floating up. "Project" BESIDE
+          its select (a 24 px box among 44 px ones) would contradict every
+          toolbar below it, unmeasured if it did not carry the class. -#}
+      <div class="topbar-tools toolbar" role="group" aria-label="Project, language and perspective">
+        {#- Both selects are real controls with labels; layout.js refills
+            them from /api/projects and reloads on change. -#}
+        <div class="field">
+          <label class="field-label" for="ctx-project">Project</label>
+          <select id="ctx-project" name="project" aria-describedby="ctx-help">
+            {%- for name in projects|map(attribute='project')|unique %}
+            <option value="{{ name }}"{% if name == ctx.project %} selected{% endif %}>{{ name }}</option>
+            {%- endfor %}
+            {%- if not projects %}
+            <option value="{{ ctx.project }}">{{ ctx.project or 'No projects yet' }}</option>
+            {%- endif %}
+          </select>
+        </div>
+        <div class="field">
+          <label class="field-label" for="ctx-language">Language</label>
+          <select id="ctx-language" name="language" aria-describedby="ctx-help">
+            {%- for p in projects if p.project == ctx.project %}
+            <option value="{{ p.language }}"{% if p.language == ctx.language %} selected{% endif %}>{{ p.language }}</option>
+            {%- endfor %}
+            {%- if not projects %}
+            <option value="{{ ctx.language }}">{{ ctx.language or '-' }}</option>
+            {%- endif %}
+          </select>
+        </div>
+        {#- WHOSE ARCHIVE THIS IS, AND HOW MUCH OF IT.
+
+            A document is judged once per perspective a customer watches
+            ("for an Investor this filing is critical, for a Sustainable
+            Customer it is beside the point"), and these two selectors say
+            which of those readings the whole dashboard is showing and how
+            far down its scale to go. Together they mean: only rows that
+            came from documents carrying, FOR THIS PERSPECTIVE, that
+            importance or a higher one.
+
+            They stand beside Project and Language because they are the same
+            kind of control - not a search, but which slice every view is
+            about - and they behave the same way: choosing one writes a
+            cookie, writes the URL and reloads (static/js/layout.js says
+            why: the pages are rendered server-side with the choice in
+            them).
+
+            THE PERSPECTIVES ARE THE ONES THE DATA HOLDS, not the ones the
+            vocabulary knows. app/context.py has the paragraph: the
+            collector harvests perspective_types from RATINGS only, so a
+            perspective that has only ever judged documents is missing from
+            that table, and it is exactly the kind this filter is for.
+
+            EACH IS A `.field` WITH A `.field-label`, like every other cell
+            in this row, or tests/ui/test_toolbar_alignment.py fails it -
+            it measures label above control, one height, one top edge. -#}
+        <div class="field">
+          <label class="field-label" for="ctx-perspective">Perspective</label>
+          <select id="ctx-perspective" name="perspective" aria-describedby="ctx-filter-help">
+            <option value=""{% if not ctx.perspective %} selected{% endif %}>All</option>
+            {%- for name in perspectives %}
+            <option value="{{ name }}"{% if name == ctx.perspective %} selected{% endif %}>{{ name }}</option>
+            {%- endfor %}
+            {%- if ctx.perspective and ctx.perspective not in perspectives %}
+            <option value="{{ ctx.perspective }}" selected>{{ ctx.perspective }}</option>
+            {%- endif %}
+          </select>
+        </div>
+        <div class="field">
+          <label class="field-label" for="ctx-importance">Show only</label>
+          {#- DISABLED, AND IT SAYS WHY. A greyed-out control with no reason
+              beside it is a dead end: the reader cannot tell whether it is
+              broken, not implemented, or waiting for something. The
+              sentence in ctx-filter-help is what `aria-describedby` reads
+              out and what the title shows on hover, and layout.js removes
+              the attribute the moment a perspective is chosen. -#}
+          <select id="ctx-importance" name="min_importance" aria-describedby="ctx-filter-help"
+                  {% if not ctx.perspective %}disabled{% endif %}>
+            {#- The default is the SECOND rung, not the first: app/context.py
+                DEFAULT_MIN_IMPORTANCE says why - "Not Important and above" is
+                every judged document, a filter that looks active and does
+                nothing. Marked here as well as there, because this select is
+                what a first choice of perspective reads its level from. -#}
+            {%- set chosen = ctx.min_importance or default_min_importance %}
+            {%- for level in importances %}
+            <option value="{{ level.name }}"{% if level.name == chosen %} selected{% endif %}>{{ level.name }} and above</option>
+            {%- endfor %}
+            {%- if not importances %}
+            <option value="">-</option>
+            {%- endif %}
+          </select>
+        </div>
+        <span id="ctx-help" class="visually-hidden">Every view shows one project in one language. Changing either reloads the page.</span>
+        <span id="ctx-filter-help" class="visually-hidden">Show only what came from documents that are at least this important for the chosen perspective. Choose a perspective first; with All there is nothing to rank by. Changing either reloads the page. The Dashboard, the Log, Buckets, Colours and the Watchlist are never narrowed by it.</span>
+        {#- A group without a label of its own still occupies the label row,
+            which is what puts these two buttons on the control baseline
+            beside the selects instead of above them. -#}
+        <div class="field field--action">
+          <span class="field-label" aria-hidden="true"></span>
+          {{ print_export_buttons(view) }}
+        </div>
+        {#- THE WAY BACK TO XTRACTING, at the end of the row a reader meets
+            first. This dashboard reads an archive; the extraction that fills
+            it, the projects and the keys that may extract all live over
+            there, and a person who wants any of those has been leaving this
+            page by typing the address.
+
+            It opens in a NEW TAB, like every other link out of here: the
+            archive a reader is looking at is a project, a language and often
+            a search, and taking the page away to answer "where do I add a
+            key" would end that. The arrow says so; the accessible name says
+            it in words. -#}
+        <div class="field field--action">
+          <span class="field-label" aria-hidden="true"></span>
+          <a class="button button--secondary topbar-out" id="to-xtracting"
+             href="{{ (request.app.state.cfg.xtracting_url if request.app.state.cfg is defined else 'https://xtracting.io') }}/dashboard"
+             target="_blank" rel="noopener noreferrer"
+             aria-label="Xtracting (opens in a new tab)">Xtracting{{ icon("newtab") }}</a>
+        </div>
+      </div>
+
+      {#- THE NAVIGATION COMES AFTER THE CONTEXT, AND ON A LINE OF ITS OWN.
+          Eleven view buttons need the full width at 1024 px, so the nav
+          always wrapped to a line of its own anyway - and the selector then
+          wrapped to a THIRD line, while the space beside the brand stayed
+          blank. Read in this order the bar answers "which archive am I in"
+          before "where do I go", the DOM order and the visual order agree
+          (WCAG 1.3.2 - nothing is moved by CSS alone), and the bar is 140 px
+          instead of 193 on a 768 px screen. That row is chrome the views get
+          back: the Log's newest problem and a typeahead's suggestions both
+          live in the last 50 px of that screen. -#}
+      <nav aria-label="Views">
+        <ul class="topbar-nav">
+          {#- ICON AND WORD, never the icon alone: app.css says why where the bar
+              is styled, and it is the same reason the buttons in the map's
+              connection popup carry both.
+
+              data-view is the hook, not the href: static/js/map.js clones the
+              glyph out of this bar so the popup and the tab cannot show two
+              different pictures of one view, and a link matched by its address
+              would break the day a path changes.
+
+              THE LABEL IS A BARE TEXT NODE, not a span, and that is not
+              tidiness. Playwright's text engine matches the SMALLEST element
+              holding the text, so a span around the word takes the match away
+              from the link - and every `a:text-is('Watchlist')` in the suite
+              stops finding anything. The flex gap spaces an anonymous text item
+              exactly as it spaces an element. -#}
+          {%- for id, label, path in views %}
+          <li><a class="nav-button" data-view="{{ id }}" href="{{ path }}"{% if id == view %} aria-current="page"{% endif %}>{{ icon(id) }}{{ label }}</a></li>
+          {%- endfor %}
+        </ul>
+        {#- The one glyph that belongs to no tab, kept where the others are so
+            static/js/map.js can clone it the same way. Hidden from everybody:
+            it draws nothing here and says nothing, it is only the source the
+            popup's links copy their arrow from. -#}
+        <span data-view="__newtab" hidden>{{ icon("newtab") }}</span>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main" class="main" tabindex="-1" data-print-view="{{ title }}">
+    <p class="print-header" data-print-header></p>
+    <div class="notice notice--warn" id="archive-empty" hidden>
+      <p><strong>The archive has no tasks yet.</strong> Start the collector in <code>API_V1/collector</code>; the views fill as results arrive.</p>
+    </div>
+    {#- A NUMBER THAT IS A SUBSET SAYS SO, ONCE, WHERE THE SUBSET IS DECIDED.
+
+        The perspective filter narrows four views at the same time, so the
+        sentence belongs to the layout and not to four templates: one place
+        to write it, one place to correct it, and it cannot end up saying
+        something different on Events than on the Graph.
+
+        `notice--info` rather than a warning: nothing is wrong. Something is
+        true that the counts above and below it do not imply, which is
+        exactly what that variant exists for (app.css says so).
+
+        Which views it appears on is routers/pages.py FILTERED_VIEWS - never
+        a view whose rows the filter does not actually touch, because a
+        sentence claiming a page is narrowed when it is not is worse than no
+        sentence at all. -#}
+    {%- if filter_applies %}
+    <div class="notice notice--info" id="filter-notice">
+      <p>Showing only what came from documents judged <strong>{{ ctx.min_importance }}</strong> or higher for <strong>{{ ctx.perspective }}</strong>. Every count on this page is a subset. Documents with no judgement for this perspective are not shown.</p>
+    </div>
+    {%- endif %}
+    {#- IS ANYTHING RUNNING, on every view.
+
+        THE QUESTION IS ASKED FROM WHEREVER THE READER IS. "Why has nothing
+        arrived since lunchtime" has two answers that look identical from
+        every page - the crawler has stopped, or the collector has - and
+        the Watchlist must not be the only page that can tell them apart. A
+        collector that has crashed is the worst of the two: it leaves no run
+        row, so without a heartbeat the one state worth seeing would be the
+        one state invisible.
+
+        IT IS HERE AND NOT IN FOURTEEN TEMPLATES because it belongs to no
+        view. static/js/status.js moves it onto the heading line - after the
+        h1, inside `.page-header`, where `margin-left: auto` holds it at the
+        far right and a narrow screen wraps it under the title instead of
+        over it (app.css: `.service-status`, and the rule at `.page-about`
+        that this is the second solution to). On the Watchlist, which had
+        its own crawler pill first, the module hands that container the
+        collector alone rather than saying the same thing twice.
+
+        EACH PILL IS A HINT BUTTON, so the detail behind it - the exact time,
+        the version, and what "not running" means - opens on a click and on
+        the keyboard as well as under a pointer. This product says in four
+        places that content may never live only in a hover.
+
+        HIDDEN UNTIL THE MODULE HAS PLACED IT: the pills say nothing until
+        /api/heartbeats has answered anyway, and a strip that appears above
+        the title and then jumps to the right of it on every page load is
+        worse than one that arrives once. -#}
+    <div class="service-status no-print" id="service-status" hidden>
+      {%- for service, name in [("crawler", "Crawler"), ("collector", "Collector")] %}
+      <div class="service-state" data-service="{{ service }}">
+        <button type="button" class="pill pill--off hint-button" id="hb-{{ service }}"
+                data-hint="hb-{{ service }}-hint" aria-expanded="false"
+                aria-controls="hb-{{ service }}-hint">
+          <span class="hb-dot" aria-hidden="true"></span>
+          <span data-hb-state>{{ name }}</span>
+          <span class="hb-seen" data-hb-seen></span>
+        </button>
+        <div class="hint-bubble service-hint" id="hb-{{ service }}-hint" role="note" hidden data-hb-detail></div>
+      </div>
+      {%- endfor %}
+    </div>
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="footer">
+    Xtracting archive dashboard {{ app_version }} - showing
+    <strong>{{ ctx.project or '-' }}</strong> in <strong>{{ ctx.language or '-' }}</strong>
+  </footer>
+
+  <script type="module" src="{{ static('js/layout.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,666 @@
+/* ==========================================================================
+ *  Map and Heatmap.
+ *
+ *  Both pages are the same shape: a form of controls, then a grid of the
+ *  drawing and a right-hand column. THE COLUMN IS A GRID COLUMN, not a
+ *  floating box - a legend laid over the map makes the top-left corner of
+ *  every screenshot unreadable. Nothing here is `position: absolute` except what Leaflet positions
+ *  itself, inside its own container.
+ *
+ *  The right column is also the map's TEXT ALTERNATIVE (MN.gov's guidance
+ *  for interactive maps, and WCAG 1.1.1): every pin and every line is a row
+ *  in a list that can be read, focused and activated without a mouse. A
+ *  reader who cannot use the map loses the picture, not the information.
+ *
+ *  NO `overflow` on anything that holds the search field: the suggestion
+ *  list is absolutely positioned and an overflow on an ancestor cuts it
+ *  away without a trace (see the header of typeahead.css). The two lists in
+ *  the side column scroll - no typeahead is in them.
+ * ========================================================================== */
+
+/* ── THE TOOLBAR RULE ─────────────────────────────────────────────────── */
+/*
+ * The defect this prevents, on this very toolbar: the "Entity or bucket"
+ * label at the bottom of its cell, its input centred, "Show on map" at the
+ * bottom, "Connection levels" higher up and the Draw checkboxes lower
+ * again - five controls in one row at five heights.
+ *
+ * The rule, so it is not a matter of taste:
+ *
+ *   * every control in a row is `--control-h` tall and their boxes share a
+ *     top and a bottom edge;
+ *   * a label sits ABOVE its control, never beside one control and above
+ *     another in the same row - all labels in a row share one baseline and
+ *     all controls share the next;
+ *   * a group without a label still OCCUPIES the label row (the empty
+ *     `.field-label` below), so it cannot float up and sit higher than its
+ *     neighbours - which is exactly what happened to the checkbox group;
+ *   * the order is the same on every view: what is searched, then how it is
+ *     narrowed, then the action.
+ *
+ * `align-items: flex-start` is what makes the tops share an edge; the
+ * previous `flex-end` shared the BOTTOM edge, which is why a cell with no
+ * label sat lower than one with a label. tests/ui/layout_rules.py measures
+ * every toolbar in the product against this at both viewport sizes.
+ */
+/* THE TIGHTEST FRAME IN THE PRODUCT, and for the Log's reason: on these two
+ * views every pixel above the picture is a pixel of the picture. The frame
+ * itself is the one every view wears (`.filter-card`, app.css); what is
+ * tightened here is the room inside it and under it - 26 px of padding and a
+ * whole gap of margin put the top of the heatmap at y=588 in a 768 px window
+ * and left less than half of it on the first screen, which is the fault
+ * test_the_map_starts_above_the_fold exists to catch. */
+.map-controls { display: grid; gap: 0.5rem; margin-bottom: 0.5rem; }
+/* AND THE NARROWEST SIDES. 1.25rem each side is 40 px the toolbar does not
+ * have: at 1024 its five cells fitted on one line with 8 px to spare, and
+ * the frame's padding pushed the last of them onto a second row - 68 px of
+ * form, and the map 68 px further down a screen it barely fits on. --gap
+ * each side keeps the row whole; the frame is still a frame. */
+.filter-card.map-controls { padding: 0.5rem 1.25rem; }
+/* THE ROW SPACES ITSELF ONCE, NOT TWICE. `.map-controls` is a grid and
+ * already puts 0.75rem between its rows; the query row's own margin-top is
+ * for the forms that are plain blocks (Query, Log); here it would be added
+ * on top of the grid's gap - 16 px of nothing, on the one view where the
+ * picture has to start above the fold. */
+.map-controls .query-actions[data-search-actions] { margin-top: 0; }
+.map-controls .toolbar,
+.map-toolbar { align-items: flex-start; }
+/* A BASIS THAT LETS THE ROW STAY WHOLE, and a grow that fills it anyway.
+ *
+ * The term field is the flexible cell of this row, and a flex line wraps on
+ * the sum of its BASES, not on what the items could shrink to: at 1024 the
+ * four fixed cells and their gaps come to 781 px of a 950 px row, so any
+ * basis over 169 px folds "Group by" onto a second line - 68 px of form,
+ * and the map that much further down a screen it barely fits on. 18rem did
+ * it the moment the frame took its padding.
+ *
+ * 10rem is under that floor at 1024 and irrelevant above it: `flex-grow: 1`
+ * gives the field every pixel the fixed cells leave, which is 169 px here
+ * and 362 px at 1440. A basis is a wrapping rule, not a width. */
+.map-controls .field { flex: 1 1 10rem; }
+/* Every cell of the row is a label row over a control row, whatever is in
+ * it. `min-height` on the label keeps the two rows the same height in every
+ * cell even where the label is empty, so the controls line up. */
+.map-toolbar > * { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; }
+.map-toolbar .field-label {
+  min-height: 1.5rem;
+  line-height: 1.5rem;
+  /* A label that wrapped would push its own control below its neighbours'.
+   * The labels on these rows are one or two short words by design. */
+  white-space: nowrap;
+}
+/* A group with no label of its own still occupies the label row. */
+.map-toolbar .field-label:empty::before { content: "\00a0"; }
+/* Everything that sits on the control baseline is one control height, so a
+ * checkbox pair, a slider and a button are as tall as the search field. */
+.map-toolbar > * > .row,
+.map-toolbar > * > .segmented,
+.map-toolbar > * > .heat-slider,
+.map-toolbar > * > .button,
+.map-toolbar > * > input,
+.map-toolbar .typeahead-input { min-height: var(--control-h); }
+.map-toolbar > * > .row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: nowrap; }
+.map-toolbar .check { min-height: var(--control-h); display: inline-flex; align-items: center; gap: 0.375rem; }
+/* A date field is as wide as a date and no wider: the browser draws its own
+ * spinner, and a stretched one is a wide empty box. */
+.map-toolbar > .field--date { flex: 0 0 auto; }
+.map-toolbar > .field--date input[type="date"] { width: 9rem; }
+
+/* THE AXIS SWITCH, in front of the field whose meaning it changes - the
+ * same control, the same two words and the same markup as the Diagrams
+ * pages (diagrams.css says the same two lines). As wide as its two buttons
+ * and no wider, and its buttons never wrap: a segmented control that broke
+ * onto a second line would be a 88 px cell in a 44 px row, which is the
+ * unevenness the toolbar rule exists to end. */
+
+/* ONE ROW OF CONTROLS, SO THE MAP IS ABOVE THE FOLD.
+ *
+ * The search field, the levels and the Draw switches were three stacked
+ * rows in a card that used half its width. At 1024x768 that put the top
+ * edge of the map at y=594: 174 px of a 476 px map on the first screen, and
+ * the first thing a customer saw on a page called Map was a form. They are
+ * one wrapping toolbar now - the search field takes what is left, the rest
+ * are as wide as their contents - which starts the map around y=440. Below
+ * about 62 rem the toolbar wraps them back into rows by itself. */
+.map-toolbar > .field--fixed { flex: 0 0 auto; }
+/* The search field gives way first: it is the one control that is useful at
+ * any width, and 12 rem still shows a whole entity name. It is also what
+ * keeps the Heatmap's seven controls on ONE row at 1440: a row that wraps
+ * costs the page 60 px of height, and the map's top edge is the number this
+ * toolbar exists to protect. */
+/* 10rem, and the reason is the wrapping rule two blocks up: a flex line
+ * breaks on the sum of its BASES. At 1024 the four fixed cells and the four
+ * gaps come to 749 px of a 950 px row, so a basis over 201 px folds "Group
+ * by" onto a second line - and 12rem is 192 px, which fitted until the
+ * frame took 40 px of the row for its padding. The field still fills
+ * whatever the fixed cells leave: `flex-grow: 1` makes it 362 px here. */
+.map-toolbar > .typeahead.field { flex: 1 1 10rem; }
+/* A help line is as wide as its sentence unless it is told otherwise, and
+ * one long sentence under the levels was enough to push Draw onto a second
+ * row at 1024 px - the whole reason this toolbar exists. Only the fields
+ * that have to give way carry it, so a page with room keeps its help on
+ * one line. */
+.map-toolbar > .field--tight .field-help { max-width: 13rem; }
+
+/* The way out of a failed request: the same button the graph draws, under
+ * the caption and inside the sticky map column so it stays with the
+ * sentence it belongs to. */
+.map-retry { margin: 0 0 0.5rem; }
+.map-status { margin: 0; color: var(--muted); }
+.map-status.is-warning { color: var(--warn); font-weight: 500; }
+/* Nothing to say, no line: an empty paragraph still claims a line box. */
+.map-status:empty { display: none; }
+
+/* The one line that says what is drawn. UNDER the picture, with the status
+ * and the retry button: see the block in map.html for why all three moved
+ * there. A screen reader still reaches it right after the region it
+ * describes, which is where a caption belongs in reading order too. */
+.map-caption { margin: 0.5rem 0 0; color: var(--muted); }
+.map-caption:empty { display: none; }
+
+.map-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(17rem, 21rem);
+  gap: var(--gap);
+  align-items: start;
+}
+/* The caption is under the picture, not a row of this grid above both
+ * columns: nothing above the canvas can move it. */
+@media (max-width: 900px) {
+  .map-layout { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* THE MAP FOLLOWS THE LISTS.
+ *
+ * The right column is the taller of the two by far - four cards of places
+ * and connections against one map - and with both columns starting at the
+ * top a reader who scrolls to the Connections list ends up beside 900 px of
+ * empty white, with the map far above the screen. Activating a row then
+ * opened a popup nobody could see. Sticky is the whole fix: the map stays
+ * on screen for as long as its column is, so the picture and its text
+ * alternative are usable TOGETHER (maptime's map-accessibility guidance:
+ * the alternative supplements the map, it does not replace it).
+ *
+ * `top` leaves the gap the page uses everywhere, and the height cap keeps a
+ * tall map from sticking past the bottom of the viewport, which would be
+ * the same bug upside down. Below 900 px the layout is one column, the map
+ * is above the lists and nothing sticks. */
+.map-root { min-width: 0; position: sticky; top: var(--gap); align-self: start; }
+@media (max-width: 900px) {
+  .map-root { position: static; }
+}
+.map-canvas {
+  height: clamp(22rem, 62vh, 40rem);
+  max-height: calc(100vh - 8rem);
+
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  /* KEEP LEAFLET'S NUMBERS INSIDE THE MAP. Leaflet stacks its panes from
+   * z-index 400 (tiles) to 800 (popups), and a container that opens no
+   * stacking context of its own hands those numbers to the root, where they
+   * outrank everything the page paints later - an error toast in the corner
+   * ends up BEHIND the map. `position: relative; z-index: 0` is what
+   * app.css asks every map view for (see the note at .toasts). */
+  position: relative;
+  z-index: 0;
+}
+
+/* SHORTER ON A SHORT SCREEN, so that what is drawn can be looked at.
+ *
+ * 62vh is a good share of a tall window and too much of a short one: the
+ * chrome above the picture does not shrink with the viewport. On a 1024x768
+ * screen it is the top bar and nav (141 px), the title with "About this
+ * page" under it (75), a toolbar that wraps to two rows at that width (152)
+ * and the query row every view now carries (44) - the map starts at 544 and
+ * a 476 px map then has more of itself below the fold than above it.
+ *
+ * `max-height: calc(100vh - 8rem)` was supposed to be the guard and never
+ * was: it assumes 128 px above the map and there are 544. The fraction is
+ * what has to give.
+ *
+ * At 52vh the map is 399 px on that screen and 224 of them are on the first
+ * screenful - more usable picture than the taller version had, and the rest
+ * is one short scroll away with the map sticking as the lists go by. */
+@media (max-height: 820px) {
+  .map-canvas { height: clamp(20rem, 52vh, 40rem); }
+}
+.map-canvas:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+/* A LEAFLET LAYER CAN BE A CANVAS, AND app.css SIZES CANVASES.
+ *
+ * `img, svg, canvas { max-width: 100% }` (app.css) is right for the page and
+ * fatal inside a map: Leaflet's overlay pane is a zero-sized box that the
+ * layers position themselves in, so "100% of the parent" is 0 px - and a
+ * canvas with an intrinsic aspect ratio then collapses its height as well.
+ * The heatmap drew 35000 painted pixels into a backing store that measured
+ * 0x0 on the screen: a page whose caption counted 13 locations over an
+ * empty world. Leaflet's own reset (vendor/leaflet/leaflet.css:48) covers
+ * `svg` and `img` in that pane but not `canvas` - which is what Leaflet's
+ * own canvas renderer draws the heatmap's circles on - so it is repeated
+ * here for canvases, in the same shape.
+ * tests/ui/test_heatmap_view.py measures the rendered box AND the painted
+ * pixels, because 54 green tests once passed over an invisible layer. */
+.leaflet-container canvas {
+  max-width: none !important;
+  max-height: none !important;
+}
+/* A PATCH OF HEAT CAN BE OPENED, AND THE POINTER IS WHERE A READER LOOKS FOR
+ * THAT. Leaflet puts `grab` on its container - the map can be dragged, which
+ * is true everywhere - so over a counted square the cursor says the other
+ * thing that is true there: a click opens what is in it. static/js/heatmap.js
+ * sets the class, and sets it only within one radius of a counted square, so
+ * the promise is never made over empty ocean. */
+.leaflet-container.is-over-spot { cursor: pointer; }
+
+.map-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 1rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+.map-side { display: grid; gap: var(--gap); min-width: 0; }
+
+/* ── The pins ─────────────────────────────────────────────────────────── */
+
+
+/* ── The cluster badge ────────────────────────────────────────────────── */
+/*
+ * markercluster ships a 40 px icon whose inner div draws the number at
+ * 12 px. Every other number on these pages is 16 px (the page's base), and
+ * this one is the number a reader looks at first - "how many pins are
+ * hidden in this blob". The outer circle becomes a 44 px target at the same
+ * time, so a cluster is as easy to hit as a button. The margin is half the
+ * width, which is what keeps the icon centred on its coordinate
+ * (MarkerCluster.Default.css sets `margin-left: -20px`).
+ */
+.marker-cluster {
+  /* Leaflet writes the 40 px box as an INLINE style (DivIcon._setIconStyles),
+   * so the four numbers below need !important to reach it. */
+  width: 44px !important;
+  height: 44px !important;
+  margin-left: -22px !important;
+  margin-top: -22px !important;
+  border-radius: 22px;
+}
+.marker-cluster div {
+  width: 34px;
+  height: 34px;
+  margin-left: 5px;
+  margin-top: 5px;
+  border-radius: 17px;
+  font-size: 1rem;
+  /* WHAT THE BADGE HOLDS IS A COUNT, SO IT IS BLUE.
+   *
+   * markercluster ships two translucent greens (rgba(110,204,57,.6) over
+   * rgba(181,226,140,.6)), and two things are wrong with keeping them. The
+   * contrast: composited over a land tile the vendor pair measures 1.50:1,
+   * and 1.14:1 over a park, for a graphic that carries meaning and is asked
+   * for 3:1 (WCAG 1.4.11). And what the GREEN would mean: #6ecc39
+   * is hue 131 deg, 16 deg from --valence-pos-1: the colour this product
+   * uses for "positive" on every rating and every market insight. The
+   * number in this badge is how many locations are hidden in the blob, and
+   * a plain count is BLUE everywhere else in the dashboard (app.css, the
+   * three scales). So it is blue here: --count-2 for the fill, --count-1
+   * for the halo behind it, one step apart so the badge still reads as one
+   * object.
+   *
+   * The ring stays the near-black every other symbol on these two pages
+   * carries (the pins, the heat circles, the connection keylines): 10.9:1
+   * over ocean and 15.2:1 over land, so a cluster is findable whatever the
+   * tile server sends. The fill is opaque for the same reason - the digits
+   * keep their contrast wherever the cluster lands - and white text on
+   * --count-2 is 4.80:1, which is what carries the number. */
+  background: var(--count-2);
+  border: 2px solid var(--text);
+  color: var(--white);
+}
+/* The outer halo, one step lighter than the fill. markercluster's own is
+ * translucent; this one is opaque, so the badge does not change colour with
+ * the tile under it. */
+.marker-cluster { background: var(--count-1); }
+/* markercluster puts the number in a <span> with a line-height of its own;
+ * without this the digits sit off-centre in the bigger circle. 30 px, not
+ * 34: the box is border-box (app.css) and the ring above takes 2 px off each
+ * side of the content box. */
+.marker-cluster span { line-height: 30px; }
+
+/* ── The type checklist ───────────────────────────────────────────────── */
+/*
+ * Checkboxes, not a multi-select: every choice is visible at once, each one
+ * is its own 44 px target, and the swatch says which colour the line will
+ * be. The count after the name is what makes an empty tick understandable -
+ * "Partner (0 on this map)" is a fact, not a broken filter.
+ */
+/* The two controls of the type filter: a box that narrows the list, and
+ * All / None. They are laid out by the same
+ * rule as the toolbar above - label over control, one height - because a
+ * card is a row of controls like any other. */
+.type-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.5rem;
+}
+.type-tools > * { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; }
+.type-tools .field-label { min-height: 1.5rem; line-height: 1.5rem; white-space: nowrap; }
+.type-tools .field-label:empty::before { content: "\00a0"; }
+.type-tools .type-find { flex: 1 1 8rem; }
+.type-tools input[type="search"] { min-height: var(--control-h); width: 100%; }
+.type-tools > * > .row { display: flex; align-items: center; gap: 0.375rem; }
+.type-tools .button { min-height: var(--control-h); }
+
+.type-list { margin: 0; padding: 0; list-style: none; max-height: 18rem; overflow-y: auto; }
+.type-list li { border-top: 1px solid var(--line-soft); }
+.type-list li:first-child { border-top: 0; }
+.type-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: var(--control-h);
+  padding: 0.25rem;
+  cursor: pointer;
+}
+.type-check input[type="checkbox"] { flex: 0 0 auto; }
+.type-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.type-count { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* ── The text alternative ─────────────────────────────────────────────── */
+
+.map-list { margin: 0; padding: 0; list-style: none; max-height: 22rem; overflow-y: auto; }
+.map-list li { border-top: 1px solid var(--line-soft); }
+.map-list li:first-child { border-top: 0; }
+.map-item {
+  display: block;
+  width: 100%;
+  min-height: var(--control-h);
+  padding: 0.5rem 0.25rem;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.map-item:hover { background: var(--accent-tint); }
+.map-item:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }
+.map-item .item-title { font-weight: 500; display: block; }
+/* The row of the entity the map was searched for, marked the way its pin is.
+ * The word "searched" is in the row's own text as well - the mark is a
+ * second cue, never the only one. */
+.map-item .item-title.is-searched { color: var(--accent-strong); }
+.map-item .item-sub { color: var(--muted); display: block; }
+.map-item .swatch { margin-right: 0.375rem; }
+.map-item.is-active { background: var(--accent-tint); box-shadow: inset 3px 0 0 var(--accent); }
+
+/* ── Print ────────────────────────────────────────────────────────────── */
+/*
+ * THE LISTS ARE THE MAP'S TEXT ALTERNATIVE, AND PAPER CANNOT SCROLL.
+ *
+ * `.map-list` and `.type-list` are scroll boxes on screen, which is what
+ * keeps four cards beside a map usable. print.css lifts the caps off
+ * everything it knows about (main, .card, .map-root ...), but these two are
+ * <ul>s inside those cards and would keep theirs: a printed Connections
+ * card showing 323 px of a 519 px list is a third of the rows missing from
+ * the sheet with nothing to say they were left out. On paper both grow
+ * to their content; the cards still keep `break-inside: avoid` from
+ * print.css, so a card that no longer fits moves to the next page instead of
+ * being cut in half.
+ *
+ * The controls go: a search field and a set of switches are not something a
+ * reader can use on a sheet of paper, and print.css only hides the toolbars
+ * it knows by name.
+ */
+@media print {
+  .map-list, .type-list {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  /* The toolbar and the two boxes that narrow the checklists are controls,
+   * and a control on a sheet of paper is furniture. The checklists
+   * themselves stay: which types were ticked is what the sheet is OF. */
+  .map-controls, .map-retry, .type-tools { display: none !important; }
+}
+
+/* ── Popups ───────────────────────────────────────────────────────────── */
+
+/* The two ends of a connection, stacked, with the arrow between them. One
+ * line and a double-headed arrow said the wrong thing twice: that the
+ * connection runs both ways, and - with two long names competing for the width
+ * of a popup - that neither of them is worth reading.
+ *
+ * THREE LINES EACH, and then an ellipsis. A name is a heading here, not the
+ * subject of the popup: the table under it is. Names in this archive run to a
+ * legal form and a place ("Acme Holding International AG, Zug"), which is two
+ * lines often and three sometimes; past that a popup would be a column of one
+ * name. The whole name is in the button below it and in the list beside the
+ * map, so nothing is only here. */
+.leaflet-popup-content .popup-pair { display: grid; gap: 0.125rem; }
+.leaflet-popup-content .popup-end { display: grid; gap: 0.0625rem; }
+/* Which end this is. Small and quiet: it labels the name under it, and the
+ * arrow between the two says the same thing to anybody who can see it. */
+.leaflet-popup-content .popup-end-role {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.leaflet-popup-content .popup-end-name {
+  font-weight: 600;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+.leaflet-popup-content .popup-arrow {
+  font-size: 1.1rem;
+  line-height: 1;
+  color: var(--muted);
+  padding: 0.0625rem 0;
+}
+
+/* ── THE KINDS OF ONE PAIR, EACH AS A SENTENCE ────────────────────────────
+ *
+ * Not a four-column table - end, kind, count, share - where the reader has
+ * to work out which of the two names the kind belongs to. Three lines say
+ * it: who, what part, and for whom.
+ *
+ * The sentence takes the width and the numbers take what they need. `auto`
+ * on the last track, not a fixed rem: "100%" and "7%" are different widths
+ * and neither should leave a gap the sentence could have used. */
+.leaflet-popup-content .popup-rels {
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.375rem;
+}
+.leaflet-popup-content .popup-rel {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0;
+  border-top: 1px solid var(--line-soft);
+}
+/* The first row sits under the count line above it, which is separator
+ * enough; a second rule there would be two lines with nothing between. */
+.leaflet-popup-content .popup-rel:first-child { border-top: 0; padding-top: 0.125rem; }
+/* No swatch on this pair (nothing is grouped): the sentence takes the
+ * column back rather than leaving a hole where a colour would have been. */
+.leaflet-popup-content .popup-rel > .popup-rel-said:first-child { grid-column: 1 / 3; }
+.leaflet-popup-content .popup-rel > .swatch { align-self: start; margin-top: 0.25rem; }
+
+/* Three lines, and the middle one is the quiet one: the two names are what
+ * a reader is looking for, the verb is how to read them. */
+.leaflet-popup-content .popup-rel-said { margin: 0; display: grid; gap: 0.0625rem; min-width: 0; }
+.leaflet-popup-content .popup-rel-end {
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.leaflet-popup-content .popup-rel-verb {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  line-height: 1.2;
+}
+
+/* The share is the comparable figure, so it is the big one; the count under
+ * it in brackets is what the share is a share OF. Centred, so the column
+ * reads down, and tabular figures so the percentages line up. */
+.leaflet-popup-content .popup-rel-num {
+  margin: 0;
+  display: grid;
+  gap: 0.0625rem;
+  justify-items: center;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.leaflet-popup-content .popup-rel-share { font-weight: 600; }
+.leaflet-popup-content .popup-rel-count { color: var(--muted); font-size: 0.8125rem; }
+
+.leaflet-popup-content .popup-count { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* ── THE WAYS OUT OF A POPUP: ONE PER LINE ────────────────────────────────
+ *
+ * Not a wrapping row. In a 300 px box that puts two buttons on a line,
+ * then one, then two - a ragged block whose shape depends on how long two
+ * entity names happen to be, with every name cut to 12 rem with an
+ * ellipsis because four of them have to share the width.
+ *
+ * A column costs one line each and buys three things: the same shape on
+ * every popup, the whole name on every button, and a target that spans the
+ * popup instead of a 90 px sliver.
+ *
+ * THE RULE ABOVE IT IS PART OF THE ANSWER. A popup is three things - what
+ * this is, what the archive holds about it, and where to go next - and with
+ * nothing between them a connection popup read as one wall of fragments.
+ * The line separates the last from the other two; `.popup-section` does the
+ * same between the first two on the popup that has all three. */
+.leaflet-popup-content .popup-links {
+  margin: 0.625rem 0 0;
+  padding-top: 0.625rem;
+  border-top: 1px solid var(--line-soft);
+  display: grid;
+  gap: 0.375rem;
+}
+/* Glyph, arrow, name - in that order. The two pictures are a fixed 16 px
+ * each so the names all start at the same x, which is what makes a column of
+ * them scannable. */
+.leaflet-popup-content .popup-link {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.375rem;
+  width: 100%;
+  text-align: left;
+}
+.leaflet-popup-content .popup-link .icon { flex: none; width: 16px; height: 16px; }
+/* The whole name now: it has the width of the popup to itself, and a name
+ * cut to an ellipsis on a button that goes somewhere is a button whose
+ * destination is a guess. Long ones wrap rather than being trimmed. */
+.leaflet-popup-content .popup-link-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+
+/* The rule between "what this is" and "what the archive holds about it".
+ * Only where there is something to separate - a place popup is two lines and
+ * a rule through the middle of two lines is noise. */
+.leaflet-popup-content .popup-section {
+  margin-top: 0.625rem;
+  padding-top: 0.625rem;
+  border-top: 1px solid var(--line-soft);
+}
+
+/* ── Heatmap ──────────────────────────────────────────────────────────── */
+
+/* The slider and the number it shows. The CAPTION is not in here: it is a
+ * .field-label above the row like every other field on that toolbar, because
+ * six rems of label beside the slider was what pushed the Heatmap's four
+ * controls onto a second row at 1024 px - and a second row puts the top of
+ * the map back below the fold. */
+.heat-slider { display: flex; align-items: center; gap: 0.75rem; }
+/* The browser gives a range input a margin of its own, which made this group
+ * 48 px tall in a row of 44 px controls - the one control on the Heatmap
+ * toolbar that did not line up with its neighbours. */
+.heat-slider input[type="range"] { flex: 1 1 6rem; min-width: 5rem; margin: 0; }
+.heat-slider output {
+  flex: 0 0 3.5rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+
+/*
+ * THE KEY. One row per colour that is on the map, the counts it stands for
+ * and how many squares carry it - the colour of each row is the very colour
+ * heatmap.js paints that count with (heatColour), so a reader can check the
+ * key against the picture.
+ *
+ * Every swatch has a near-black border: a pale step on a white card is a
+ * graphical object below 3:1 without one (WCAG 1.4.11).
+ */
+.heat-steps { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.375rem; }
+.heat-step { display: flex; align-items: center; gap: 0.5rem; min-height: 1.75rem; }
+.heat-swatch {
+  flex: 0 0 auto;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 1.5px solid var(--text);
+  /* A square, because the thing it stands for is a square of the grid - and
+   * because the field it samples has no outline of its own to echo. */
+  border-radius: 2px;
+}
+.heat-step-label { flex: 1 1 auto; min-width: 0; }
+.heat-step-count { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* THE SAVE CONTROL, in Leaflet's own frame so it reads as part of the map.
+ * `.leaflet-bar a` already gives it the 26 px box, the border and the
+ * hover; this only centres the glyph inside it and keeps the anchor from
+ * looking like a link. */
+.map-save-control a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+}
+.map-save-control a:hover { color: var(--accent); }
+.map-save-control svg { display: block; }
+
+/* ── The invisible half of a connection ───────────────────────────────────
+ *
+ * A connection is drawn twice: the colour, thin, and under it a wide stroke
+ * painted with `transparent` that carries the click and the popup. The colour
+ * alone would be a 1.5 px target, which is not a target (WCAG 2.5.8 asks 24).
+ *
+ * `pointer-events: stroke` rather than relying on the paint: `transparent` IS
+ * hit-testable in every browser this is tested in, but the rule that says so is
+ * the one thing here that could quietly change under us, and a connection that
+ * stops answering a click is a page that looks broken for no visible reason.
+ * Stated, it cannot drift. The selector is as specific as Leaflet's own
+ * `.leaflet-pane > svg path.leaflet-interactive`, which sets `auto`.
+ */
+.leaflet-pane > svg path.map-line-hit,
+.leaflet-pane > canvas.map-line-hit {
+  pointer-events: stroke;
+}
+
+/* What the table did not list. Not a row of the table: it is a sentence about
+ * the table, and a reader scanning the counts column must not meet a number
+ * that is a sum of the rows below the fold. */
+.leaflet-popup-content .popup-more {
+  margin: 0.375rem 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}

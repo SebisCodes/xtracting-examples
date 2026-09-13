@@ -1,0 +1,20 @@
+# Your keys and passwords. Never commit these.
+#
+# The pattern matches a file called exactly `.env`, at any depth - so
+# `API_V1/database/.env` and `API_V1/dashboard/standard/.env` are covered, while `.env.example`
+# (which documents every variable) and `API_V1/database/.env.test` (a throw-away
+# archive on 127.0.0.1 whose password protects nothing) are NOT, and both
+# are committed on purpose. Do not "tidy" this into `.env*`: that would
+# swallow the two files a fresh clone needs to run the tests.
+.env
+.env.bak-labels
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# Editors
+.idea/
+.vscode/

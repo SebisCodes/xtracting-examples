@@ -1,0 +1,115 @@
+# The archive database, on its own.
+#
+#   cp .env.example .env      # set a password
+#   docker compose up -d
+#
+# Works the same with podman-compose, nerdctl compose and the other
+# Compose-compatible runtimes - see the repository README.
+
+name: ${ARCHIVE_STACK:-xtracting}-database
+
+services:
+  xtracting_db:
+    # Fully qualified on purpose. Docker silently prepends docker.io to a short
+    # name; Podman refuses to guess and fails with "did not resolve to an alias".
+    # Spelling out the registry costs nothing and makes the file portable.
+    image: docker.io/timescale/timescaledb:latest-pg18
+    restart: unless-stopped
+    # One compression policy per hypertable means eleven background jobs. The
+    # image ships PostgreSQL's default max_worker_processes of 8, which the
+    # scheduler shares with parallel query, while TimescaleDB is configured to
+    # start up to 16 - so policies fail with "failed to start job" and chunks
+    # quietly stay uncompressed. TimescaleDB's own rule is
+    # max_worker_processes >= 1 + max_background_workers + max_parallel_workers.
+    # THE WORKERS ABOVE NEED SOMEWHERE TO PUT THEIR RESULTS, and a container
+    # gets 64 MB of /dev/shm by default. A parallel query hands each worker a
+    # shared-memory segment; on this archive a hash over one hop of a big
+    # entity's connections asks for 6-8 MB at a time, and several at once take
+    # the 64 MB. What Postgres then says is
+    #
+    #     could not resize shared memory segment ... No space left on device
+    #
+    # which reads as a full disk and is not one - the disk can have tens of
+    # gigabytes free. The view that meets it fails with a 500 and the
+    # NEXT view fails too, because the pressure is not on the query that caused
+    # it.
+    #
+    # 1 GB rather than a number tuned to today's archive: shm is reserved
+    # lazily, so an idle database uses none of it, and the failure it prevents
+    # is one nobody can diagnose from the message.
+    shm_size: 1gb
+    command:
+      - postgres
+      - -c
+      - max_worker_processes=24
+      - -c
+      - timescaledb.max_background_workers=12
+      # ONE LOCK PER CHUNK, AND A HYPERTABLE HAS HUNDREDS. A query that cannot
+      # exclude chunks - "every address of these 1700 entities", which is what
+      # a connection map of a well-connected entity asks - takes a lock on each
+      # chunk of processed_data.locations. A grown archive has hundreds of
+      # them, against a default budget of 64 per transaction, and what
+      # Postgres says when it runs out is
+      #
+      #     out of shared memory
+      #     HINT: You might need to increase max_locks_per_transaction
+      #
+      # 2048 is roughly four times the chunk count of the biggest hypertable,
+      # which leaves room for the joins beside it and for the archive to grow.
+      # It costs shared memory whether it is used or not - about 40 MB at
+      # max_connections=100 - and that is the cheaper half of the trade: the
+      # alternative is a view that answers 500 on a question the archive can
+      # actually answer.
+      - -c
+      - max_locks_per_transaction=2048
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:-xtracting_archive}"
+      POSTGRES_USER: "${POSTGRES_USER:-xtracting}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}"
+      # Optional application roles, see init/04-roles.sh. Compose reads .env
+      # for its own substitution only; the script inside the container sees a
+      # variable only when it is passed on here. Empty means "no roles".
+      DASHBOARD_DB_USER: "${DASHBOARD_DB_USER:-}"
+      DASHBOARD_DB_PASSWORD: "${DASHBOARD_DB_PASSWORD:-}"
+      SCRAPER_DB_USER: "${SCRAPER_DB_USER:-}"
+      SCRAPER_DB_PASSWORD: "${SCRAPER_DB_PASSWORD:-}"
+    volumes:
+      # Runs once, on an empty data directory. Changing the schema later means
+      # writing a migration, not editing these files - see docs/DESIGN.md.
+      # ,z relabels for SELinux. Without it these mounts are unreadable on
+      # Fedora, RHEL and anything else with SELinux enforcing - which is where
+      # Podman is the default runtime - and the schema silently never loads.
+      # Systems without SELinux ignore the flag.
+      - ./init:/docker-entrypoint-initdb.d:ro,z
+      # Read-only, so `verify.sql` is available inside the container without
+      # copying it in every time.
+      - ./verify.sql:/verify.sql:ro,z
+      - ./verify-scraper.sql:/verify-scraper.sql:ro,z
+      # PostgreSQL 18 changed where this belongs. The image now puts its data in
+      # a major-version subdirectory of /var/lib/postgresql, so the volume goes
+      # one level up - mounting the old /var/lib/postgresql/data makes the
+      # container refuse to start and tell you so at length.
+      - archive-data:/var/lib/postgresql
+    ports:
+      # Bound to localhost: this holds your extractions, and the password in
+      # .env.example is not a password.
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    networks:
+      - archive
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-xtracting} -d ${POSTGRES_DB:-xtracting_archive}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+networks:
+  archive:
+    # Named, because the collector in the next folder joins this network by name
+    # rather than being part of the same Compose project. Derived from
+    # ARCHIVE_STACK so a second copy on the same machine gets its own network
+    # instead of sharing this one - see .env.example.
+    name: ${ARCHIVE_STACK:-xtracting}-archive
+
+volumes:
+  archive-data:

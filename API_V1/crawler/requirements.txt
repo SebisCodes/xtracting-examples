@@ -1,0 +1,11 @@
+# The crawler's own dependency is the database driver. Everything else it needs
+# - httpx, beautifulsoup4, lxml, protego, pypdf, openpyxl, playwright - belongs
+# to crawlkit, and is pinned there once so that the dashboard and the crawler
+# cannot end up with two different versions of the code that decides what a
+# link is.
+#
+# The relative path works in the image as well: the Dockerfile copies both
+# files with their folders (see crawler/Dockerfile).
+-r ../crawlkit/requirements.txt
+
+psycopg[binary]==3.3.5

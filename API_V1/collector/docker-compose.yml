@@ -1,0 +1,54 @@
+# The collector, on its own.
+#
+#   cp .env.example .env      # put your API keys in it
+#   docker compose up -d
+#
+# Expects the archive database to be running first. It joins that database's
+# network by name, which is why the two folders can be separate Compose
+# projects and still find each other.
+#
+# Pointing at a database somewhere else? Set DATABASE_URL to it and remove the
+# `networks:` blocks below - the collector needs a PostgreSQL with the archive
+# schema, not specifically the one in ../database.
+
+name: ${ARCHIVE_STACK:-xtracting}-collector
+
+services:
+  collector:
+    build: .
+    restart: unless-stopped
+    environment:
+      # Passed as parts, not as one interpolated URL. Nested ${...} defaults are
+      # not portable across Compose implementations, and a password containing
+      # @ or / would break a hand-built URL anyway. Set DATABASE_URL instead to
+      # point at a database somewhere else.
+      DATABASE_URL: "${DATABASE_URL:-}"
+      POSTGRES_USER: "${POSTGRES_USER:-xtracting}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-}"
+      POSTGRES_DB: "${POSTGRES_DB:-xtracting_archive}"
+      POSTGRES_HOST: "${POSTGRES_HOST:-xtracting_db}"
+      POSTGRES_PORT: "${POSTGRES_PORT:-5432}"
+      XTRACTING_API_URL: "${XTRACTING_API_URL:-https://api.xtracting.io}"
+      XTRACTING_API_KEYS: "${XTRACTING_API_KEYS:?set XTRACTING_API_KEYS in .env}"
+      POLL_INTERVAL_MINUTES: "${POLL_INTERVAL_MINUTES:-15}"
+      COLLECTED_LOOKBACK_HOURS: "${COLLECTED_LOOKBACK_HOURS:-2}"
+      CLEAR_CONTENT_ON_FETCH: "${CLEAR_CONTENT_ON_FETCH:-false}"
+      KEY_STAGGER_SECONDS: "${KEY_STAGGER_SECONDS:-20}"
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+    # So POSTGRES_HOST=host.docker.internal reaches a database running on this
+    # machine but outside a container. Docker Desktop provides that name on its
+    # own; Docker Engine on Linux does not, and without this line it simply does
+    # not resolve. Podman answers to host.containers.internal natively and
+    # accepts this too.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - archive
+
+networks:
+  archive:
+    # Created by ../database. Start that first, or this will not come up.
+    # ARCHIVE_STACK must match the value in ../database/.env, or this joins a
+    # network the database is not on.
+    name: ${ARCHIVE_STACK:-xtracting}-archive
+    external: true

@@ -1,0 +1,431 @@
+{#- Diagrams: one subject, eight tabs of charts.
+
+    The page is /diagrams/{scope} (routers/pages.py): summary, entity,
+    source, location, market or events. The scope decides what the search
+    box asks for - an entity, a host, a place, a topic, an event type - and
+    ON THE SUMMARY IT ASKS FOR ANY OF THEM: the view of everything gets the
+    magnifier that searches everything, and a term typed there is put to all
+    five kinds at once (app/scope.py: _resolve_everything). Which is also
+    why the summary's box may be left empty and the other five may not: an
+    empty summary is the whole project, an empty scope page is nothing.
+
+    Only the tab that is open is fetched (static/js/diagrams.js). Fifty-six
+    charts is a minute of database work over a real archive, far too much
+    for every page load.
+
+    Each tab opens with a SUMMARY BAND above the grid - the newest sources,
+    the most extreme ratings, the connection matrix - and which charts are in
+    it is decided in the registry, not here (ChartSpec.band).
+
+    The tab strip is written out here rather than fetched, so the page has
+    its navigation before any JavaScript runs. tests/unit/test_chart_registry.py
+    pins it against app/charts/__init__.py, so the two cannot drift apart.
+
+    Variables from routers/pages.py: scope, scope_label, diagram_scopes,
+    plus the usual view/title/ctx/projects.
+-#}
+{% extends "_layout.html" %}
+{% from "_macros.html" import typeahead, timeframe_toolbar, search_actions, icon %}
+
+{#- What one page of this scope is about, as a phrase that fits into a
+    sentence: "Charts about one place", not "Charts about one location". -#}
+{%- set scope_subjects = {
+      "entity": "one entity or bucket", "source": "one source or host",
+      "location": "one place", "market": "one entity or bucket",
+      "events": "one kind of event",
+   } -%}
+{#- THE PLACEHOLDER SAYS WHAT AN EMPTY FIELD MEANS, AND ON THE FIVE SCOPED
+    PAGES IT MEANS NOTHING IS CHARTED. A scope page with no term draws no
+    charts at all (app/scope.py: an empty term on a scoped kind resolves to
+    nothing rather than to everything - charting everything is what the
+    summary is for), so "Every entity" promised the opposite of what the page
+    did, while the banner asked for a search and the cards blamed the period.
+    One meaning, in all three places.
+
+    The summary is the exception and its placeholder says so: an empty box
+    there IS the whole project, which is why its hint ends with "leave it
+    empty for the whole project" and its reset row is worth having.
+
+    TWO AXES, ONE FIELD. Every scope but the summary answers two questions
+    about the same term - "this one thing" and "this whole class" - and the
+    switch in front of the box picks which. The page is busy enough without
+    a second search box beside the first, so ONE field changes what it
+    suggests, what it is called and what an empty one means. Each row below
+    is (label, suggestion list, placeholder, the sentence in "About this
+    page"), once per axis.
+
+    The summary has no type axis at all: it is already everything, and a
+    type search over everything is the summary again (app/scope.py raises
+    on it), so its switch is not rendered. -#}
+{#- A MARKET INSIGHT IS ABOUT AN ENTITY AND CARRIES A TOPIC, and it has no
+    third thing that is a "type": an outlook is a VALUE the reading has, not
+    a class it belongs to. So the market row below reads an entity on the
+    object axis, like every other page, and a topic on the second one - and
+    the switch in front of the field says Topic there rather than Type.
+
+    (This paragraph is here rather than beside that row because a Jinja
+    comment is a TAG: inside the dict literal below it is a syntax error, and
+    the page answers 500 with "unexpected char '#'".) -#}
+{#- WHAT THE SWITCH CALLS ITS TWO HALVES, per scope.
+    It said "Object" on all of them, which names nothing: the reader has to
+    open the field to find out whether an object here is a company, a
+    document or a place. The word is the scope's own subject instead, so
+    the switch reads as the question it asks - "search by Source, or by
+    Type" - before anything is typed.
+
+    The market row says Entity and Topic: a market insight is ABOUT an
+    entity and CARRIES a topic, and it has no third thing that is a type
+    (app/scope.py: SCOPE_AXIS_KIND). -#}
+{%- set axis_words = {
+      "entity":   {"object": "Entity",   "type": "Type"},
+      "source":   {"object": "Source",   "type": "Type"},
+      "location": {"object": "Location", "type": "Type"},
+      "market":   {"object": "Entity",   "type": "Topic"},
+      "events":   {"object": "Event",    "type": "Type"},
+   } -%}
+{%- set search_fields = {
+      "summary":  {"object": ("Search everything", "/api/suggest/anything", "Search anything in this project",
+                              "An entity, a bucket, a document, a host, a place, a topic or an event type - leave it empty for the whole project")},
+      "entity":   {"object": ("Entity or bucket", "/api/suggest/entity_or_bucket", "Search for an entity or bucket",
+                              "A bucket name charts every member of the bucket, in every language"),
+                   "type":   ("Entity type", "/api/suggest/entity_type", "Search for an entity type",
+                              "A type charts every entity of that kind - \u201cCompany\u201d is every company; a type bucket merges its spellings")},
+      "source":   {"object": ("Source or host", "/api/suggest/source", "Search for a source or host",
+                              "A name, or a host such as news.example.com"),
+                   "type":   ("Source type", "/api/suggest/source_type", "Search for a source type",
+                              "A type charts every document of that kind - \u201cPress release\u201d is every press release")},
+      "location": {"object": ("Place", "/api/suggest/address", "Search for a place",
+                              "city \u00b7 region \u00b7 country, as the archive spells it"),
+                   "type":   ("Place type", "/api/suggest/location_type", "Search for a place type",
+                              "A type charts every place of that kind - \u201cHeadquarters\u201d is every head office")},
+      "market":   {"object": ("Entity or bucket", "/api/suggest/entity_or_bucket", "Search for an entity or bucket",
+                              "Every reading the archive holds about that entity; a bucket charts every member"),
+                   "type":   ("Topic", "/api/suggest/market_topic", "Search for a market topic",
+                              "Topics are translated; the list shows this language, and a topic bucket merges the spellings")},
+      "events":   {"object": ("Event", "/api/suggest/event", "Search for an event by name",
+                              "One event, by the name the archive gave it"),
+                   "type":   ("Event type", "/api/suggest/event_type", "Search for an event type",
+                              "Type names are translated; the list shows this language")},
+   } -%}
+{#- WHICH AXIS THE PAGE OPENS ON. "object" everywhere the box has always
+    meant one thing; EVENTS opens on the type, because its box has always
+    searched the event type and every link ever shared of it must keep
+    meaning what it meant (app/scope.py: DEFAULT_AXIS). -#}
+{%- set default_axis = "type" if scope == "events" else "object" -%}
+{%- set asked_axis = request.query_params.get('axis') -%}
+{%- set current_axis = asked_axis if asked_axis in search_fields[scope] else default_axis -%}
+{%- set tabs = [("sources", "Sources"), ("ratings", "Ratings"), ("entities", "Entities"),
+                ("connections", "Connections"), ("locations", "Locations"),
+                ("market", "Market Insights"), ("attributes", "Attributes"),
+                ("events", "Events")] -%}
+{%- set current_tab = request.query_params.get('tab') if request.query_params.get('tab') in tabs|map(attribute=0)|list else 'sources' -%}
+{%- set current_timeframe = request.query_params.get('timeframe') or '7d' -%}
+{%- set current_page = request.query_params.get('page')|int if request.query_params.get('page') else 0 -%}
+{%- set current_q = request.query_params.get('q') or '' -%}
+{#- The period in words, for the first paint and for the case where the
+    charts never arrive: a toolbar that says nothing about which period it
+    is showing leaves the reader with numbers and no question. Only for the
+    newest window - an older page is a date range only the API can name. -#}
+{%- set frame_labels = {"24h": "Last 24 hours", "7d": "Last 7 days", "30d": "Last 30 days",
+                        "90d": "Last 90 days", "6m": "Last 6 months", "1y": "Last year",
+                        "3y": "Last 3 years", "5y": "Last 5 years"} -%}
+{%- set current_caption = frame_labels.get(current_timeframe, "") if current_page == 0 else "" -%}
+
+{% block head %}
+<link rel="stylesheet" href="{{ static('vendor/leaflet/leaflet.css') }}">
+<link rel="stylesheet" href="{{ static('css/views.css') }}">
+{#- The rows behind a clicked point. Its own sheet because its module is
+    shared: the landing page opens the same dialog (css/drilldown.css).
+
+    BEFORE diagrams.css, not after. Its screen rule for the numbers table
+    (`.chart-table .table`) is two classes deep, and so is the @media print
+    rule in diagrams.css that has to override it - equal specificity, so the
+    later sheet wins. Loaded after, the drilldown's screen font size beat the
+    print one and the printed table ran off the sheet. -#}
+<link rel="stylesheet" href="{{ static('css/drilldown.css') }}">
+<link rel="stylesheet" href="{{ static('css/diagrams.css') }}">
+{#- The tile server is a setting (DASHBOARD_TILE_URL); minimap.js reads it
+    from here, the same way the Query page does. Empty when the app is
+    rendered without its configuration (a template test), and then the
+    module falls back to the OSM default. -#}
+<meta name="tile-url" content="{{ request.app.state.cfg.tile_url if request.app.state.cfg is defined else '' }}">
+{#- Chart.js is a classic script and deferred, so it has run by the time
+    the page module (a module script, also deferred) executes. -#}
+<script defer src="{{ static('vendor/chart.js/chart.umd.js') }}"></script>
+{% endblock %}
+
+{% block content %}
+{%- set axes = search_fields[scope] %}
+{%- set field = axes[current_axis] %}
+{#- `diagrams-page-header`: the About disclosure shares the title's line here,
+    the way it does on the Log, because the first chart has to be on the first
+    screen of a 768 px window and the disclosure under the heading is 40 px of
+    the way there. diagrams.css says it. -#}
+<div class="page-header diagrams-page-header">
+  <h1>Diagrams - {{ scope_label }}</h1>
+  <details class="page-about">
+    <summary>About this page</summary>
+    <div class="page-about-body">
+      <p class="page-purpose">
+        {%- if scope == 'summary' %}
+        Everything in <strong>{{ ctx.project or 'this project' }}</strong> ({{ ctx.language or '-' }}), counted per period and per category. Search to narrow it to one name of any kind, or leave the box empty for the whole project.
+        {%- else %}
+        Charts about {{ scope_subjects[scope] }} in <strong>{{ ctx.project or 'this project' }}</strong> ({{ ctx.language or '-' }}).
+        {%- endif %}
+      </p>
+      <p>Pick a tab; only the open one is loaded. The arrows beside the period step the charts backwards and forwards through time.</p>
+      {%- if axes|length > 1 %}
+      <p><strong>Object</strong> searches for one thing: {{ axes['object'][3]|lower }}.</p>
+      <p><strong>Type</strong> searches for a whole class: {{ axes['type'][3]|lower }}.</p>
+      {%- else %}
+      <p>{{ field[3] }}</p>
+      {%- endif %}
+    </div>
+  </details>
+</div>
+
+{#- Two strips of buttons sit above the charts and two of their words are
+    the same ("Market Insights", "Events"), so each strip says out loud what
+    it changes - and the visible words ARE the accessible name
+    (aria-labelledby), rather than a second, invisible wording. -#}
+<nav class="scope-nav" aria-labelledby="scope-strip-label">
+  {#- WHAT THE TWO STRIPS ARE, beside the word that names each of them.
+      They look alike and two of their words are the same, so a reader who
+      has not met them has no way to tell what changes what. One sentence
+      each, on the ⓘ: "About" picks the SUBJECT the page is drawn for,
+      "Charts" picks WHICH PICTURES of that subject are shown. -#}
+  <span class="strip-hint" role="img" tabindex="0"
+        title="Which subject the page is about: everything, or one kind of row. It decides what the search below looks in and what the charts count."
+        aria-label="Which subject the page is about: everything, or one kind of row. It decides what the search below looks in and what the charts count.">i</span>
+  <span class="strip-label" id="scope-strip-label">About:</span>
+  <ul>
+    {%- for id, label in diagram_scopes.items() %}
+    <li><a class="nav-button" href="/diagrams{{ '' if id == 'summary' else '/' ~ id }}?project={{ ctx.project|urlencode }}&amp;language={{ ctx.language|urlencode }}"
+           {% if id == scope %}aria-current="page"{% endif %}>{{ label }}</a></li>
+    {%- endfor %}
+  </ul>
+</nav>
+
+{#- Every scope has the box, the summary included: there it means "narrow
+    everything down to this name", and clearing it goes back to everything. -#}
+<form class="filter-card diagrams-search" id="diagrams-search" novalidate
+      data-axis="{{ current_axis }}" data-scope="{{ scope }}">
+  {#- A TOOLBAR, so it obeys the one alignment rule (app.css, and
+      tests/ui/test_toolbar_alignment.py measures it): every control 44 px
+      with its top on one line, every label above its own control on the
+      line above, and the cell that carries no label of its own - the
+      button - given the label row so it cannot float up. The order is the
+      same as everywhere else: what is searched, then how, then the
+      action. -#}
+  <div class="toolbar diagrams-search-row">
+    {%- if axes|length > 1 %}
+    {#- ONE FIELD, TWO QUESTIONS. The switch changes what the box suggests,
+        what it is called and what it means - not what is typed in it, which
+        is why there is no second box beside this one. -#}
+    <div class="field axis-field">
+      <span class="field-label" id="axis-label">Search by</span>
+      <div class="segmented" role="group" aria-labelledby="axis-label" data-axis-switch>
+        <button type="button" class="button button--secondary" data-axis="object"
+                aria-pressed="{{ 'true' if current_axis == 'object' else 'false' }}"
+                title="One thing: {{ axes['object'][0]|lower }}">{{ axis_words[scope]['object'] }}</button>
+        {#- The word for the second axis is the scope's own: every other page
+            groups by a TYPE, and the market page groups by a TOPIC. Calling
+            it Type there named something the data does not have. -#}
+        <button type="button" class="button button--secondary" data-axis="type"
+                aria-pressed="{{ 'true' if current_axis == 'type' else 'false' }}"
+                title="A whole class: {{ axes['type'][0]|lower }}">{{ axis_words[scope]['type'] }}</button>
+      </div>
+    </div>
+    {%- endif %}
+    {#- limit=8, not the macro's 12: the list opens under a field that sits
+        half way down the page, and thirteen 44 px rows ran 277 px past the
+        bottom of a 1024x768 window - the last suggestions could only be
+        reached by scrolling. Eight is also what NN/g asks of a suggestion
+        list (ten or fewer, scannable at a glance). -#}
+    {#- No hint under the field: what the box accepts is in the About
+        disclosure at the top of the page, and the placeholder already says
+        what an empty box means. -#}
+    {{ typeahead("q", value=current_q, label=field[0], suggest_url=field[1],
+                 placeholder=field[2], empty_label="- clear the search -",
+                 limit=8) }}
+  </div>
+  {{ search_actions() }}
+  <p class="notice notice--warn notice--tight" id="diagrams-resolved" hidden></p>
+</form>
+
+<div class="diagrams-toolbar">
+  <div class="tabs-row">
+    <span class="strip-hint" role="img" tabindex="0"
+          title="Which pictures of that subject are drawn. The subject and the period stay as they are; only the charts change."
+          aria-label="Which pictures of that subject are drawn. The subject and the period stay as they are; only the charts change.">i</span>
+    <span class="strip-label" id="tabs-strip-label">Charts:</span>
+    <div class="tabs" role="tablist" aria-labelledby="tabs-strip-label">
+      {%- for id, label in tabs %}
+      <button type="button" role="tab" id="tab-{{ id }}" data-tab="{{ id }}"
+              aria-controls="charts" aria-selected="{{ 'true' if id == current_tab else 'false' }}"
+              tabindex="{{ '0' if id == current_tab else '-1' }}">{{ label }}</button>
+      {%- endfor %}
+    </div>
+  </div>
+  {{ timeframe_toolbar(current_tab, current_timeframe, current_page, current_caption) }}
+</div>
+
+{#- What the page is doing, in words. The charts on screen stay while the
+    next tab is fetched, so without this line the tab strip and the cards
+    disagree with nothing to say why. static/js/diagrams.js fills it. -#}
+<p class="grid-status" data-grid-status role="status" aria-live="polite" hidden></p>
+
+<div id="charts" class="chart-grid" role="tabpanel" tabindex="-1"
+     aria-labelledby="tab-{{ current_tab }}" data-scope="{{ scope }}" aria-busy="true">
+  <p class="loading">Loading the charts…</p>
+</div>
+
+
+{#- THE SUMMARY, AT THE FOOT OF THE PAGE, BEHIND A RULE.
+
+    Not above the grid, because of what it is: a summary here is a LIST of
+    the newest documents, of every attribute with its value, of the strongest
+    signals - and a map. Any of those can be a screen tall on its own. Above
+    the grid they would push the charts - the thing the tab is named after -
+    off the first screen entirely.
+
+    So: charts first, then a rule, then everything that can be any height.
+    The rule is not decoration; without it a full-width list under a grid of
+    cards reads as more cards that failed to line up.
+
+    One summary per tab and its contents are decided in ONE place - the charts
+    marked `band` in app/charts/__init__.py, plus the `summary` block the same
+    endpoint returns - so the eight of them are read and changed together
+    rather than eight templates apart.
+
+    Hidden until there is something in it: a heading and a rule over nothing
+    is the empty gap the rest of this page was straightened out to remove.
+    The heading is visible because the section is at the foot of the page -
+    above the grid it would cost 36 px of a screen that is fighting for the
+    fold, and down here the reader has scrolled past every chart and needs
+    to be told what the next thing is. -#}
+<section class="chart-summary" id="chart-summary" hidden aria-labelledby="chart-summary-title">
+  <h2 class="chart-summary-title" id="chart-summary-title">Summary</h2>
+  {#- WHAT IS LEFT DOWN HERE IS THE LIST.
+      The map and the summary charts have moved up into the grid - a map is
+      one of the pictures and belongs where the reader meets it, a chart is a
+      chart wherever it stands - so this section holds the one thing that is
+      not a picture: the rows themselves, under everything that was drawn.
+      The map card is PARKED here while it is not in the grid, which is why
+      it is still in this markup (static/js/diagrams.js: parkMap). -#}
+{#- THE MAP UNDER THE CHARTS, on the two tabs that have a place on the world.
+    Connections draws the pairs, Locations the addresses, both of them the
+    scope's own and both of them from the period the charts are drawn for
+    (routers/api_diagrams.py: /api/diagrams/{scope}/map).
+
+    Hidden until the tab that owns it is open and its answer has arrived -
+    static/js/diagrams.js unhides it - because a card that reserves its
+    height on six tabs that have no map is exactly the empty gap the rest of
+    this page was straightened out to remove.
+
+    EVERY LINE ABOUT THE PICTURE IS UNDER IT (app.css, THE SHAPE OF A PAGE):
+    the caption that says what was drawn and what was left out sits below
+    the map, so nothing that appears or disappears can push the map down the
+    page while a reader is looking at it. -#}
+<section class="card diagrams-map-card" id="diagrams-map-card" aria-labelledby="diagrams-map-title" hidden>
+  <div class="card-header">
+    <h2 id="diagrams-map-title" class="card-title">Where these rows are</h2>
+    <span class="card-meta" id="diagrams-map-meta"></span>
+    {#- One click to the view that can do more with the same search: levels,
+        type filters, bowed lines and the picture as a file. -#}
+    <a class="button button--secondary" id="diagrams-map-open" href="/map">Open the map view</a>
+  </div>
+  <div id="diagrams-map" class="minimap" role="region"
+       aria-label="Map of what the charts above count"></div>
+  <p class="minimap-caption" id="diagrams-map-caption"></p>
+</section>
+
+  <div class="chart-band" id="chart-band" data-chart-band></div>
+
+</section>
+
+{#- One card, cloned per chart by static/js/charts.js. -#}
+<template id="chart-card-template">
+  <section class="card chart-card">
+    <div class="card-header">
+      <h3 class="card-title"></h3>
+      {#- static/js/charts.js puts the card's ⓘ here, immediately right of the
+          title: it explains the title, so it stands with it rather than at
+          the far end of a row of controls. -#}
+      {#- TWO ICONS AND THE COUNT UNDER THEM, in one right-hand column.
+
+          The two are what can be done to a chart: make it big, take it away
+          as a picture. No third one for the numbers behind it: enlarging a
+          chart already shows that table under the picture, so such an icon
+          would open a second copy of something one press away, and a row of
+          three unlabelled glyphs is harder to read than two.
+
+          The count is under them and at the right edge. Between the title
+          and the icons it would be the first thing squeezed by a long title
+          and read as part of the heading; under the icons it belongs to the
+          card's corner, which is where the numbers about the card live.
+
+          Each button's tooltip names its FUNCTION in two words; the
+          accessible name adds which chart, because eight cards on one screen
+          all called "Enlarge" leave a screen-reader user with eight
+          identical buttons (WCAG 2.5.3). -#}
+      <div class="chart-tools">
+        <div class="chart-tool-row">
+          <button type="button" class="button button--quiet chart-icon chart-enlarge"
+                  data-chart-enlarge hidden>{{ icon("enlarge") }}</button>
+          <button type="button" class="button button--quiet chart-icon chart-image"
+                  data-chart-image hidden>{{ icon("image") }}</button>
+        </div>
+        <span class="card-meta" data-chart-meta></span>
+      </div>
+    </div>
+    <p class="chart-purpose"></p>
+    {#- What just happened to this card, when something did: the name the
+        picture was saved under, or why it could not be. A download that
+        appears to do nothing is a download nobody trusts. -#}
+    {#- EVERYTHING ABOVE THE PICTURE IS THE SAME HEIGHT ON EVERY CARD, and
+        that is why these three lines are below it. Each of them appears only
+        sometimes - a warning, the note about dropped labels, the name a
+        picture was saved under - and each of them pushed the plot down by a
+        line on the cards that had one. Eight cards then had their charts at
+        eight different heights and at different sizes, and the row of
+        buttons above wrapped or did not wrap depending on how long the
+        title was, which moved them again.
+
+        Under the picture they still read as being about it, and the picture
+        starts at the same y on every card (css/diagrams.css). -#}
+    <div class="chart-canvas" data-chart-canvas></div>
+    <p class="chart-status" data-chart-status role="status" hidden></p>
+    {#- What happened to the labels. A chart with more bars than its plot
+        has room for draws NO labels - rotating them is the smear this
+        replaced - and says so here: "43 entities - open the chart to see
+        the names." -#}
+    <p class="chart-labels" data-chart-labels hidden></p>
+    <p class="notice notice--warn" data-chart-note hidden></p>
+    {#- NOTHING TO DRAW, SAID IN THE MIDDLE OF WHERE THE PICTURE WOULD BE.
+        A sentence tucked under a collapsed card reads as a footnote to a
+        chart that is not there; in the plot's own place, centred, with the
+        glyph for "nothing here", it reads as the answer it is. The box is
+        the height a card keeps for its picture, so a tab of empty cards is
+        a row of equal cards rather than a ragged stack. -#}
+    <div class="chart-empty" data-chart-empty hidden>
+      {{ icon("empty") }}
+      <p data-chart-empty-text></p>
+    </div>
+    <div class="chart-legend" data-chart-legend></div>
+    <div class="chart-numbers" data-chart-table></div>
+  </section>
+</template>
+{% endblock %}
+
+{% block scripts %}
+{#- Leaflet as a classic script, so the global L exists before any module
+    runs: classic scripts execute during parsing, module scripts after it. -#}
+<script src="{{ static('vendor/leaflet/leaflet.js') }}"></script>
+{#- The heat layer, for the Locations tab: its summary is the Heatmap view's
+    own picture rather than a field of pins, because "where is there most of
+    this" is what heat answers and forty pins on one town do not. 12 kB, and
+    the map card is on two of the eight tabs. -#}
+<script src="{{ static('vendor/leaflet.heat/leaflet-heat.js') }}"></script>
+<script type="module" src="{{ static('js/diagrams.js') }}"></script>
+{% endblock %}

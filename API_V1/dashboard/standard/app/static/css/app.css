@@ -1,0 +1,2180 @@
+/* ==========================================================================
+ *  The dashboard's design system. Light theme, one file.
+ *
+ *  The numbers are not taste, they are the accessibility floor this
+ *  dashboard commits to, and the reasons are here so nobody "tidies" them away:
+ *
+ *    16 px base text        WCAG 1.4.4 and every study on older readers:
+ *                           smaller text is the first thing people zoom.
+ *    44 px controls         WCAG 2.5.8 asks for 24 px; 44 px is the size a
+ *                           finger or a shaky mouse hits without aiming.
+ *    3 px focus ring        visible on every background, offset so it never
+ *                           hides the control's own border (WCAG 2.4.11).
+ *    4.5:1 text, 3:1 UI     every colour token below was measured on white
+ *                           (the surface it sits on); numbers in comments.
+ *    three data scales      valence (red to green), relevance (violet) and
+ *                           count (blue), each with ONE meaning, defined
+ *                           once below and read from there by every chart,
+ *                           badge, pill and legend (js/palette.js publishes
+ *                           the same values to JavaScript).
+ *    prefers-reduced-motion nothing moves for someone who asked it not to.
+ *
+ *  Tokens first, then the base elements, then the components in the order
+ *  a page is read: top bar, main grid, cards and tiles, tables, forms and
+ *  buttons, chips, dialogs, toasts, utilities. typeahead.css, print.css,
+ *  graph.css and map.css add to this file; they never override its tokens.
+ *
+ *  NO `overflow` ON PANELS THAT HOLD A TYPEAHEAD. The suggestion list is
+ *  absolutely positioned and an overflow on any ancestor clips it silently
+ *  (see typeahead.css). Tables scroll inside `.table-scroll`, not the card.
+ *
+ *  ── THE SHAPE OF A PAGE ──────────────────────────────────────────────
+ *
+ *  Five rules, and they hold on every view. They are written down because
+ *  they are easy to lose: two views framing their filters while six do
+ *  not, one view's button a whole gap below its fields and another's a
+ *  quarter of that, three views putting a line of words above the picture
+ *  it describes. The same furniture, arranged differently on each page,
+ *  reads as a different product on each page.
+ *
+ *  1. THE QUESTION IS IN A FRAME, THE ANSWER IS NOT. Everything a reader
+ *     can fill in or press to ask goes inside one `.filter-card`; what the
+ *     archive answers goes in `.card`s below it. A form with no edge has no
+ *     visible end, and the button that sends it then reads as stranded.
+ *
+ *  2. ONE WAY TO ASK, IN ONE PLACE. `search_actions` (_macros.html) is the
+ *     only thing that sends a query: a magnifier and the word "Search", a
+ *     cross and the word "Clear", under the fields and hard against the
+ *     left edge, half a gap below them. Ten views, one row, one shape.
+ *
+ *  3. NOTHING SEARCHES BY ITSELF. Enter or the button, never a click in a
+ *     suggestion list - see the `via` note in typeahead.js. A query nobody
+ *     ordered is one they cannot stop, and on this archive that is a minute
+ *     of database.
+ *
+ *  4. EVERY LINE ABOUT A PICTURE GOES UNDER THE PICTURE. Status, retry,
+ *     caption, summary - all of them come and go, and above a map or a
+ *     drawing each arrival moves the picture down while somebody is reading
+ *     why. Under it, nothing above the canvas can move it.
+ *
+ *  5. NOTHING RESERVES ROOM FOR WORDS THAT ARE NOT THERE. An empty line
+ *     holding 3 em open, a hidden paragraph with a `min-height`, a grid row
+ *     stretched by a neighbour - each of them is a band of blank page whose
+ *     cause is somewhere else entirely, and a reader has no way to tell it
+ *     from a mistake. `:empty { display: none }` and placement, not
+ *     reserved height.
+ * ========================================================================== */
+
+:root {
+  /* Text on white: #1a1a1a 16.7:1, #4a4a4a 8.9:1 (muted).
+   *
+   * A PLACEHOLDER IS LIGHTER THAN A VALUE, and that difference is the whole
+   * job of the colour: it is the one cue that says "nothing is typed here
+   * yet". At #4a4a4a it would be the same grey as the prose beside it and an
+   * empty field would read as a filled one - which matters most in the
+   * typeahead, where a SET value is drawn as the placeholder (the pattern in
+   * typeahead.css) and is #1a1a1a. Empty against set is 4.54:1 against
+   * 16.7:1, which nobody can mistake.
+   *
+   * NOT LIGHTER THAN THIS. A placeholder is text and WCAG 1.4.3 asks 4.5:1
+   * of it; #767676 is 4.54:1 on white and is the lightest grey that passes.
+   * The browsers' own default (#757575 at 54% opacity, about 2.8:1) is
+   * exactly the thing this overrides. */
+  --text: #1a1a1a;
+  --muted: #4a4a4a;
+  --placeholder: #767676;
+
+  /* Surfaces. --surface-2 is the tint behind table headers and tiles. */
+  --white: #ffffff;
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --surface-2: #eef0f3;
+  /* The alternate line of a long list of rows - eighty links in the picker,
+   * where the eye has to hold one row across the width of the dialog. It is
+   * a hair off the card so it separates without striping the page, and it
+   * is HERE because a colour in a view is a colour nobody can change in one
+   * place: the picker had this value written into sources.css. */
+  --stripe: #fbfcfd;
+
+  /* ONE BORDER TOKEN. Not two - #767676 for a control and a lighter
+   * #d9dce1 for everything a card, a table row or a tile is drawn with -
+   * because the lighter one is 1.37:1 on white: below the 3:1 WCAG 1.4.11
+   * asks of a boundary that carries meaning, and far below what separates
+   * two white boxes on a white page. That is the "wash" pages read as.
+   *
+   * So there is ONE line colour, it is 4.54:1 on white and 4.16:1 on the
+   * page ground, and it changes in one place. `--line-soft` stays as a NAME
+   * because five other stylesheets spell it (logs.css, sources.css,
+   * settings.css, views.css, graph.css) - it is the same line, and nothing
+   * may give it a colour of its own again. */
+  --line: #767676;
+  --line-soft: var(--line);
+
+  /* Accent: #1d4f91 is 8.0:1 on white as text and white-on-it 8.0:1 as a
+   * button. --accent-tint is its wash for set fields and selected rows. */
+  --accent: #1d4f91;
+  --accent-strong: #143a6b;
+  --accent-tint: #f2f6fb;
+  --on-accent: #ffffff;
+
+  /* Status colours, each ≥ 4.5:1 on white as text and paired with a word
+   * or an icon - colour is never the only carrier. */
+  --ok: #1e6b3a;        /* 6.3:1 */
+  --ok-tint: #edf7f0;
+  --warn: #8a5300;      /* 6.2:1 */
+  --warn-tint: #fdf4e6;
+  --error: #a3241c;     /* 7.4:1 */
+  --error-tint: #fbeeed;
+
+  /* ── THE THREE DATA SCALES ───────────────────────────────────────────
+   *
+   *  Colour means ONE thing in this dashboard, and there are exactly three
+   *  meanings. Reach for the scale by what the number IS, not by how the
+   *  chart looks:
+   *
+   *    valence     a reading that can be good or bad - a rating, a
+   *                sentiment, an outlook. Diverging: red is negative,
+   *                green is positive, and the step grows with the distance
+   *                from neutral (`rating_values.float_value` -3..+3 is the
+   *                step, not the label).
+   *    relevance   how much something matters - `bool_high_relevance`,
+   *                `importance_types.float_value` 0..4. One hue, violet,
+   *                stronger with more relevance. NEVER red or green:
+   *                relevance is not good or bad.
+   *    count       a plain magnitude - rows per period, sources, events.
+   *                Blue. `--count` alone for a single series, the ramp
+   *                where one count is split into ordered parts.
+   *
+   *  `--no-data` is the fourth thing and it is not a scale: it is ABSENCE -
+   *  Unset, unstated, no rows. Grey, and grey is used for nothing else, so
+   *  "no reading" can never be read as "a middling reading".
+   *
+   *  WHY NONE OF THESE IS PALE. Every mark on a page has to reach 3:1
+   *  against the ground it is drawn on (WCAG 1.4.11), and 3:1 against
+   *  --bg is a relative luminance of 0.27 - which is a mid tone, not a
+   *  pastel. The palest step of each scale therefore sits AT that ceiling
+   *  and the rest descend from it; "stronger colour" is carried by
+   *  luminance, which every reader has, rather than by saturation, which
+   *  a projector or a cheap screen throws away. The numbers in the
+   *  comments are measured, and tests/unit/test_palette.py fails on a
+   *  value that breaks any of them - contrast, the monotonic ordering of
+   *  each ramp, and the luminance distance between the two ends of the
+   *  valence scale (a red and a green of the same lightness are one grey
+   *  to a dichromat and in a black-and-white print).
+   *
+   *  Text drawn ON a filled mark is white on all of them except the three
+   *  palest steps, which take --text; js/palette.js decides with textOn()
+   *  so nobody has to remember which is which.
+   *
+   *  Read them from here. A hex in a view is a second copy that will
+   *  disagree with this one within a month (js/palette.js publishes the
+   *  same values to JavaScript through getComputedStyle). */
+
+  /* Valence, seven steps: -3 Egregious … 0 Neutral … +3 Excellent, and the
+   * seven sentiments on the same scale. Outlook uses ±2 and 0. */
+  --valence-neg-3: #630e0b;   /* 12.05:1 on the page, white text 13.14:1 */
+  --valence-neg-2: #922018;   /*  7.88:1                    8.60:1 */
+  --valence-neg-1: #ba412f;   /*  4.96:1                    5.41:1 */
+  --valence-0:     #9c874d;   /*  3.22:1, --text on it      4.96:1 */
+  --valence-pos-1: #258442;   /*  4.32:1, white text        4.71:1 */
+  --valence-pos-2: #197239;   /*  5.49:1                    5.99:1 */
+  --valence-pos-3: #0d6134;   /*  6.93:1                    7.56:1 */
+
+  /* Relevance, five steps: importance 0..4, and the top step alone for the
+   * yes/no `bool_high_relevance`. */
+  --relevance-0: #9f7bb8;     /*  3.21:1, --text on it      4.97:1 */
+  --relevance-1: #915bb9;     /*  4.37:1, white text        4.77:1 */
+  --relevance-2: #843cb5;     /*  5.84:1                    6.37:1 */
+  --relevance-3: #70259e;     /*  7.87:1                    8.58:1 */
+  --relevance-4: #57137d;     /* 10.73:1                   11.70:1 */
+  --relevance: var(--relevance-4);
+
+  /* Counts. --count is the one blue of a single series; the ramp is for a
+   * count split into ordered parts, lightest first. --count-4 is the
+   * page's own accent, so a bar and a link are the same blue. */
+  --count-1: #668db3;         /*  3.19:1, --text on it      4.99:1 */
+  --count-2: #4575a9;         /*  4.40:1, white text        4.80:1 */
+  --count-3: #336299;         /*  5.75:1                    6.27:1 */
+  --count-4: #1d4f91;         /*  7.46:1                    8.14:1 */
+  --count-5: #133f75;         /*  9.65:1                   10.52:1 */
+  --count-6: #072f64;         /* 12.03:1                   13.13:1 */
+  --count: var(--count-4);
+
+  /* Absence. 1.64:1 from --valence-0, so "no reading" and "a neutral
+   * reading" are two colours in a key and not one. */
+  --no-data: #616670;         /*  5.28:1, white text        5.76:1 */
+
+  /* The focus ring: dark blue with a white halo underneath, so it is seen
+   * on white, on the accent button and on a map tile alike. */
+  --focus: #0b3d91;
+  --focus-halo: #ffffff;
+
+  --radius: 6px;
+  --radius-lg: 10px;
+  --shadow: 0 2px 8px rgba(20, 30, 50, 0.12);
+  --shadow-lg: 0 8px 28px rgba(20, 30, 50, 0.22);
+
+  --control-h: 44px;
+  --gap: 1rem;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --page-max: 1600px;
+}
+
+/* ── Base ─────────────────────────────────────────────────────────────── */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  font-size: 100%;               /* 16 px unless the user set otherwise */
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+h1, h2, h3, h4 {
+  line-height: 1.25;
+  margin: 0 0 0.5rem;
+  font-weight: 650;
+  color: var(--text);
+}
+h1 { font-size: 1.75rem; }
+h2 { font-size: 1.375rem; }
+h3 { font-size: 1.125rem; }
+h4 { font-size: 1rem; }
+
+p { margin: 0 0 0.75rem; }
+p:last-child { margin-bottom: 0; }
+
+a { color: var(--accent); text-underline-offset: 0.15em; }
+a:hover { color: var(--accent-strong); }
+
+/* THE FLOOR IS 16 px, AND IT HOLDS FOR THE SIDE REMARKS TOO.
+ *
+ * `small` and `.tag` are not 14 px and 13 px: between them they carry
+ * the unit under every counter ("in the last year"), the hint under every
+ * field, the count over every result list and the type of every event -
+ * none of which is decoration. A reader who has to zoom to read the label
+ * of a number has been given a picture, not a number, and the first thing
+ * older readers do with 14 px text is exactly that (the 16 px line at the
+ * top of this file is why it is here at all).
+ *
+ * So size stops being the way a remark is made secondary. Colour
+ * (`--muted`, 8.9:1 on white) and weight do it instead, and they do it
+ * without costing anybody a magnifier. The ONE exception is monospace:
+ * a mono face at the same em runs visibly larger than the body face, and
+ * 0.9375em is the optical correction that makes it match - it is not a
+ * smaller size, it is the same size drawn in another font. */
+small, .small { font-size: 1rem; }
+.muted { color: var(--muted); }
+code, kbd, .mono { font-family: var(--mono); font-size: 0.9375em; }
+
+img, svg, canvas { max-width: 100%; }
+
+/* …EXCEPT INSIDE A MAP, WHERE "100% OF THE PARENT" IS ZERO.
+ *
+ * A Leaflet pane is a zero-sized positioned box that its layers place
+ * themselves in, so the rule above collapses anything Leaflet draws
+ * DIRECTLY into a pane. Leaflet's own stylesheet resets it, but only for
+ * the overlay pane (vendor/leaflet/leaflet.css) - and a circle asked for
+ * the MARKER pane gets a renderer of its own in that pane instead
+ * (static/js/minimap.js: setPoints puts the places above the lines).
+ *
+ * What that looked like: the Diagrams map drew a correct world with all
+ * twenty-two of its dots painted off the left-hand edge of it, twenty-two
+ * <path> elements in the DOM and nothing on the screen. The svg's layout
+ * width was 0 while its own width attribute said 1637.
+ *
+ * `> svg` and `> canvas` are deliberate: they are Leaflet's own renderers and
+ * nothing else. An icon inside a marker or a popup is not a child of the pane
+ * and keeps the page's rule.
+ *
+ * THE CANVAS HALF BELONGS HERE, and the heat field is what depends on it.
+ * css/map.css carries the same exemption for `canvas` - but only the Map and
+ * the Heatmap views load it. Without this line the heat canvas on /diagrams
+ * would be sized 898 x 418 by its own attributes and laid out at 0 x 0 by
+ * this stylesheet: a full field of colour painted into a box with no area,
+ * nothing on the screen and nothing wrong with the data.
+ *
+ * A UI test that reads the pixels back out of the canvas with getImageData
+ * is blind to the element's CSS box, so the test measures the box
+ * (tests/ui/test_diagrams_map.py). */
+.leaflet-pane > svg,
+.leaflet-pane > canvas { max-width: none !important; max-height: none !important; }
+
+/* NOTHING TURNS `hidden` OFF.
+ *
+ * Half the components below give a block a `display` of their own
+ * (`.notice` is a flex row, `.pager` a flex row, `.stat-periods` a grid),
+ * and a `display` in a stylesheet beats the browser's own
+ * `[hidden] { display: none }` - so every element a view hides by setting
+ * `el.hidden = true` stayed on the screen. What that looked like: the
+ * layout's "The archive has no tasks yet" banner pinned above a full
+ * dashboard, an empty warning strip on the Events list, a pager with two
+ * live buttons on a result that has one page.
+ *
+ * It sits here, in front of all of them, and it is `!important` because the
+ * rules it has to beat are ordinary class rules - and because `hidden` is
+ * not a suggestion. */
+[hidden] { display: none !important; }
+
+/* One focus style for everything, including things graph.js makes
+ * focusable (SVG nodes). :focus-visible keeps it away from mouse clicks on
+ * buttons, where a ring after every click reads as a glitch. */
+:focus { outline: none; }
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--focus-halo);
+}
+
+::selection { background: var(--accent); color: var(--on-accent); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── Skip link ────────────────────────────────────────────────────────── */
+
+.skip-link {
+  position: absolute;
+  left: 0.5rem;
+  top: -100px;
+  z-index: 100;
+  padding: 0.75rem 1rem;
+  background: var(--accent);
+  color: var(--on-accent);
+  border-radius: var(--radius);
+  text-decoration: none;
+}
+.skip-link:focus { top: 0.5rem; }
+
+/* ── Top bar ──────────────────────────────────────────────────────────── */
+
+.topbar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--line-soft);
+  box-shadow: var(--shadow);
+  /* Not sticky: a sticky bar of this height steals a fifth of a 768 px
+   * screen on every scroll, and the views have their own toolbars. */
+}
+
+.topbar-inner {
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding: 0.5rem var(--gap);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem var(--gap);
+}
+
+.topbar-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: var(--control-h);
+  font-weight: 700;
+  font-size: 1.125rem;
+  color: var(--text);
+  text-decoration: none;
+  margin-right: 0.5rem;
+}
+.topbar-brand:hover { color: var(--accent-strong); }
+.topbar-brand small { font-weight: 400; color: var(--muted); }
+
+/* Nav: real links styled as buttons, WITH their text - an icon-only bar
+ * is a memory test this dashboard refuses to set. The glyph goes BEFORE the word and
+ * never instead of it.
+ *
+ * WHAT THE GLYPHS COST. Eleven buttons filled 974 of the 1024 px this
+ * dashboard is laid out for, and an icon and its gap add about 24 px to each:
+ * the row wraps to two on a 1024 px screen. That is why the padding is 0.6rem
+ * here rather than the 0.875rem a button gets elsewhere, and why the gap is
+ * tighter - it buys back most of it. `flex-wrap` was always on, so what happens
+ * past that point is a second row rather than a bar with buttons falling off
+ * the end of it. */
+.topbar-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.topbar-nav li { margin: 0; }
+
+.nav-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: var(--control-h);
+  padding: 0 0.6rem;
+  border-radius: var(--radius);
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 500;
+  border: 1px solid transparent;
+}
+/* The glyph is the same size as everywhere else and takes the link's colour,
+ * so the current tab's icon turns with its text rather than staying dark on
+ * the accent. */
+.nav-button .icon { flex: none; }
+.nav-button:hover { background: var(--surface-2); color: var(--text); }
+.nav-button[aria-current="page"] {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
+}
+
+/* The project + language selector and Print/Export sit at the right; on
+ * a narrow screen they wrap under the nav rather than shrinking.
+ *
+ * IT IS A TOOLBAR, AND IT SAYS SO IN ITS CLASS. The row carries `.toolbar`
+ * in _layout.html, so everything about how it is laid out - label above
+ * control, one control height, an unlabelled group taking the label row -
+ * comes from the block further down this file, and the same UI test that
+ * measures the ten toolbars underneath it measures this one. It is the
+ * first control row a reader meets on every page; a compact "label beside
+ * control" here contradicted every view below it, and it escaped the
+ * measurement only because the class was missing.
+ *
+ * The two things left here are the two that are this row's own: it is
+ * pushed to the right of the navigation, and its labels are quiet. */
+.topbar-tools { margin-left: auto; }
+/* THE NAVIGATION TAKES A LINE OF ITS OWN, so the selector can have the
+ * blank half of the brand's line. Eleven buttons do not fit beside the
+ * brand at 1024 px, so the nav wrapped whatever this said; what it did NOT
+ * have to do was push the selector onto a third line and spend 53 px of a
+ * 768 px screen on chrome. `flex-basis: 100%` says the wrap out loud
+ * instead of leaving it to what happens to fit, and the markup is already
+ * in this order so nothing is moved by CSS alone. */
+.topbar-inner > nav { flex-basis: 100%; }
+/* Real class selectors, not `:where()`: the toolbar block further down is
+ * the design system's floor and is written at zero specificity so a view
+ * can say something of its own - which is only possible if the view says
+ * it with more than zero. */
+.topbar-tools .field-label { color: var(--muted); }
+/* The two selects take the width they need rather than stretching: this
+ * row shares its line with the navigation, and a field that grows would
+ * push the nav onto a second line on a laptop. */
+.topbar-tools .field { flex: 0 1 auto; }
+.topbar-tools select { min-width: 10rem; max-width: 22rem; }
+
+/* FOUR SELECTS ON A ROW THAT ALREADY HELD THREE BUTTONS, WITHOUT COSTING
+ * THE VIEWS A LINE OF THEIR FIRST SCREEN.
+ *
+ * Perspective and Show only joined Project and Language here, on the row
+ * that also carries Print, Export and the way back to Xtracting. Every
+ * pixel this bar grows comes off every view underneath it, and the comment
+ * on the navigation below records what that is worth: 48 px is the height
+ * of two rows of the Log and the top of the map.
+ *
+ * MEASURED, at /query with the preseed, and these are the widths the
+ * browser gives the natural content:
+ *
+ *   Project 256 - Language 160 - Perspective 164 - Show only 303
+ *   Print+Export 175 - Xtracting 124 - five gaps 60   = 1242 px
+ *
+ * and 1242 is EXACTLY what is left beside the brand at 1440. So the row
+ * would wrap, and the bar go from 141 px to 193 px on a screen with room to
+ * spare - for one select whose longest value happens to be "Critical
+ * Importance and above". Capping that one at 12 rem takes the row to
+ * 1131 px and the bar back to 141: the value still reads, and the whole
+ * list is in the dropdown either way.
+ *
+ * NARROWER THAN 1345 THE OTHER THREE HAVE TO GIVE WAY TOO, and narrower
+ * than 1197 no cap can save the line at all. Two steps, both measured
+ * rather than picked:
+ *
+ *   ≤ 1344  every select in this row is capped as well, which brings it to
+ *           983 px - and 983 is what still fits beside the brand at 1280.
+ *   ≤ 1196  983 no longer fits beside the brand, so the group takes a line
+ *           of its own exactly as the navigation does. It has to be ONE row
+ *           on that line or the saving is spent again, and 983 is what makes
+ *           992 px do it at 1024.
+ *
+ * Measured end to end: 141 px at 1280 and above - the bar without the two
+ * context controls - and 241 px at 1024 against 189 - one row, which is what
+ * two more controls cost and no more. The full value of every capped select
+ * is still in its dropdown.
+ *
+ * THE ROW AT 1024 IS NOT FREE, AND IT IS PAID FOR. Unpaid it costs 52 px off
+ * the first screen of every view: the Heatmap's map starting at y=618 with
+ * 150 of its 399 px above the fold - 38 per cent of the one thing that view is
+ * for - and the Graph's canvas losing the room two drag tests need. Ten UI
+ * tests at that viewport measure exactly that, which is what a layout fault
+ * looks like when the tests are allowed to measure rather than to describe.
+ *
+ * WHAT ACTUALLY DRIVES IT, measured child by child rather than guessed at. The
+ * group is 923 px of content at 1024 and only 830 px are free beside the brand,
+ * so it wraps to a line of its own - and the wrap, not the width, is what
+ * costs the 52 px, because the navigation below it then has a third line to
+ * start from. Two half-measures fail for one reason each and both are worth
+ * knowing: capping `.topbar-tools select` alone leaves the group at 887
+ * because `#ctx-importance { max-width: 12rem }` is an ID and outranks it, and
+ * lifting `flex-basis: 100%` alone leaves it at 887 as well, because 887 still
+ * does not fit in 830. All four selects have to come down TOGETHER with the
+ * basis, and the crossover is sharp: at 7 rem the group is 807 px and takes the
+ * brand's line; at 7.5 rem it is 839 and wraps again, taking the whole 52 px
+ * back with it.
+ *
+ * WHAT IT COSTS, and why that is the cheap half. Each select reads about
+ * fourteen characters at 1024 - the Project select shows "_preseed Alpha"
+ * rather than "_preseed Alpha (12 t", which is a truncation either way. The
+ * choice is not between a legible control and a screen; it is between a
+ * slightly shorter truncation and a usable map. The perspective and the
+ * threshold are written out in full in the notice under the heading of every
+ * view they narrow, and every value is one click away in the dropdown either
+ * way. Measured: bar 189 px, the same as without the two context controls,
+ * and the map at 51 per cent of the first screen. */
+#ctx-importance { max-width: 12rem; }
+
+/* Both bounds, not just the cap: when min-width is larger than max-width
+ * CSS keeps the MINIMUM, and the row would go on wrapping while a rule that
+ * only lowered the maximum looked like it was doing something. */
+@media (max-width: 1344px) {
+  .topbar-tools select { min-width: 8rem; max-width: 9.5rem; }
+}
+
+/* AT 1024 THE SELECTS GIVE WAY, NOT THE SCREEN. Handing the group a line of
+ * its own is the obvious move and the wrong one: it puts the Heatmap's map at
+ * y=618 with 150 of its 399 px above the fold. This step caps the four instead
+ * and keeps them on the brand's line - 807 px into the 830 that are free
+ * there, against 887 for either half of the rule alone.
+ *
+ * `#ctx-importance` IS NAMED HERE ON PURPOSE. Its own rule above is an ID, so a
+ * class selector cannot reach it and "Show only" would sit at 12 rem while the
+ * other three came down - which is exactly the measurement that made the first
+ * attempt look like the cap did nothing at all.
+ *
+ * `min-width: 0` MATTERS AS MUCH AS THE CAP: the base rule asks for 10 rem, and
+ * where a minimum is larger than a maximum CSS keeps the MINIMUM. A rule that
+ * only lowered the maximum would look like it was working and change nothing.
+ *
+ * Above 1196 nothing here applies and the bar is 141 px with every name in
+ * full - the same height as a bar without the context controls. */
+@media (max-width: 1196px) {
+  .topbar-tools select,
+  #ctx-importance { min-width: 0; max-width: 7rem; }
+}
+
+/* ── Main ─────────────────────────────────────────────────────────────── */
+
+/* WHITESPACE IS THE SEPARATOR OF FIRST RESORT.
+ *
+ * Three quarters of a gap more between the blocks of a view, because
+ * several of them carry no border: a form standing on the page
+ * ground needs air around it to read as its own thing, and air is the
+ * quietest way to give it - it draws no line and says nothing.
+ *
+ * The Log undoes this for itself (logs.css): there the blocks above the
+ * list are chrome, and every pixel of chrome is a row of the log. */
+.main {
+  flex: 1 0 auto;
+  width: 100%;
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding: var(--gap);
+  display: grid;
+  gap: 1.75rem;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+}
+
+/* AIR IS THE FIRST THING A SMALL SCREEN CANNOT AFFORD. On a 1024x768 screen
+ * a Diagrams page carries four of those 1.75 rem gaps above its first chart -
+ * 48 px of the 768 there are, spent on saying "these are different things" to
+ * a reader who cannot see the things at all. One rem still separates them; it
+ * is the difference between air and a scroll.
+ *
+ * AFTER `.main`, NOT BEFORE IT. Both selectors are one class, so this is
+ * decided by source order and nothing else: written above, it loses to the
+ * 1.75 rem and changes nothing at all - and measures as "the gap rule does
+ * not work" rather than as what it is. */
+@media (max-width: 1196px) {
+  .main { gap: 1rem; }
+}
+
+.page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem var(--gap);
+}
+.page-header h1 { margin: 0; }
+.page-purpose { color: var(--muted); margin: 0; }
+
+/* WHAT THE PAGE IS FOR, WHEN SOMEBODY ASKS.
+ *
+ * Every view opened with a sentence of prose under its heading, and on the
+ * busier ones two or three more were scattered under the fields: what a
+ * bucket is, what a preset does, why the dates do not run in order. A
+ * person reads each of them once. Permanently on the page they are a
+ * paragraph to get past before the first control, every single visit - and
+ * "far too much at once" is what that adds up to.
+ *
+ * So they gather in ONE disclosure beside the heading, closed. Two words at
+ * rest, the whole explanation one press away, and nothing is lost: the text
+ * is in the document, so `aria-describedby` still reaches it and find-in-page
+ * still finds it. What must NOT go in here is anything that reports state -
+ * a filter that is on, a count, an error, an unsaved change. Those stay on
+ * the page where they are. This is for what is always true. */
+/* ALWAYS UNDER THE HEADING, NEVER BESIDE IT. `flex-basis: 100%` on a
+ * wrapping flex line puts this on a line of its own, so the disclosure sits
+ * below the title on every page and at every width. Beside the title it
+ * moved as the heading changed length - "Diagrams - Market Insights" pushed
+ * it to the far right and "Map" left it hard against the h1 - so the one
+ * control that is on every page was never in the same place twice. */
+.page-about { margin: 0; flex-basis: 100%; }
+.page-about > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-height: 2rem;
+  padding: 0 0.25rem;
+  margin-left: -0.25rem;
+  border-radius: var(--radius);
+  color: var(--muted);
+  cursor: pointer;
+  list-style: none;   /* the triangle below replaces the browser's */
+}
+.page-about > summary::-webkit-details-marker { display: none; }
+/* A triangle of our own, drawn where the flex box put the text: `display`
+ * anything but `list-item` loses the browser's marker, and a disclosure with
+ * no marker is a grey phrase nobody presses. */
+.page-about > summary::before {
+  content: "";
+  width: 0; height: 0;
+  border-left: 0.4em solid currentColor;
+  border-top: 0.3em solid transparent;
+  border-bottom: 0.3em solid transparent;
+  transition: transform 120ms ease;
+}
+.page-about[open] > summary::before { transform: rotate(90deg); }
+@media (prefers-reduced-motion: reduce) {
+  .page-about > summary::before { transition: none; }
+}
+.page-about > summary:hover { color: var(--accent); }
+.page-about[open] > summary { color: var(--accent); margin-bottom: 0.25rem; }
+.page-about-body { display: grid; gap: 0.375rem; max-width: 68ch; color: var(--muted); }
+.page-about-body p { margin: 0; }
+
+.print-header { display: none; }  /* print.css shows it */
+
+.footer {
+  max-width: var(--page-max);
+  width: 100%;
+  margin: 0 auto;
+  padding: 0.75rem var(--gap) 1.25rem;
+  color: var(--muted);
+}
+
+/* ── EQUAL ROWS ───────────────────────────────────────────────────────── */
+/*
+ *  ELEMENTS THAT SIT SIDE BY SIDE ARE THE SAME SIZE. Query's Where / What /
+ *  When is the model: three panels of one width with their tops in line.
+ *
+ *  `repeat(auto-fit, minmax(<min>, 1fr))` is only the first half of it -
+ *  it gives EQUAL TRACKS, and a 1024 px screen then gets fewer columns
+ *  rather than narrower ones. The other half is making the CONTENT stop
+ *  forcing one box taller than the next, and that is the part that is easy
+ *  to miss: a grid item stretches to the row's height by default, but
+ *  everything inside it stays at the top, so two tiles whose labels wrap
+ *  differently put their last line at two different heights and the row
+ *  reads as ragged even though the boxes are identical.
+ *
+ *  So a card or a tile in a grid is a COLUMN: the heading at the top, the
+ *  body taking the slack, and anything that belongs at the foot - a row of
+ *  buttons, a pager, the "show the diagrams" line of a tile - pushed to the
+ *  bottom edge with `margin-top: auto`, where it lines up with its
+ *  neighbours' feet.
+ *
+ *  Where one element genuinely needs more room than the others it takes a
+ *  WHOLE MULTIPLE of their track (2fr to 1fr), never an arbitrary width. */
+.grid { display: grid; gap: var(--gap); }
+.grid > * { min-width: 0; }
+.grid--tiles { grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); }
+.grid--cards { grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr)); }
+.grid--two { grid-template-columns: repeat(auto-fit, minmax(min(100%, 28rem), 1fr)); }
+/* The one grid whose second track is a MEASURE and not a share of the row:
+ * the aside holds a map, and a map is drawn at the size it is given rather
+ * than at a size that means something. 16-20 rem is the range in which the
+ * mini-map is still a picture and the list beside it still a list; wider is
+ * only more sea. Everything else in this file is equal tracks or a whole
+ * multiple of one. */
+.grid--main-aside { grid-template-columns: minmax(0, 1fr) minmax(16rem, 20rem); }
+@media (max-width: 900px) {
+  .grid--main-aside { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* The columns. `.card` and `.stat-tile` are selected by name rather than
+ * with `> *` so this keeps its specificity over the views' own stylesheets
+ * (views.css gives .stat-tile--link a `display: block`, and it is loaded
+ * after this file). */
+.grid--tiles > .card, .grid--tiles > .stat-tile,
+.grid--cards > .card, .grid--cards > .stat-tile,
+.grid--two > .card, .grid--two > .stat-tile {
+  display: flex;
+  flex-direction: column;
+}
+/* The foot of a card, at the foot of the card. `.push-bottom` and `.grows`
+ * are the two utilities a view reaches for when its own last element is
+ * not one of these: the foot goes to the bottom edge, and the block above
+ * it takes whatever height is left. */
+.grid > .card > .pager,
+.grid > .stat-tile > .stat-go,
+.grid > * > .push-bottom { margin-top: auto; }
+.grid > * > .grows { flex: 1 1 auto; }
+
+/* ── Cards and stat tiles ─────────────────────────────────────────────── */
+
+/* A little more air inside, because there are few boxes: a panel that
+ * has to hold a heading, a count and a list reads calmer with a quarter-gap
+ * more beside it than with a second border drawn inside it.
+ *
+ * SIDES ONLY. Vertically a card is as tall as what is in it, and a card
+ * with nothing in it has to stay short - the Diagrams grid puts six of them
+ * on a screen and an empty period must not become six tall white boxes
+ * (tests/ui/test_diagrams_drilldown.py: a card with no rows is a few lines
+ * tall). Air at the sides costs no height at all. */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-lg);
+  padding: var(--gap) 1.25rem;
+  min-width: 0;
+  break-inside: avoid;
+}
+.card-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+.card-title { margin: 0; font-size: 1.125rem; }
+
+/* A CARD THAT IS A DISCLOSURE. Its summary is the card's title and reads
+ * like one: same size, same weight, plus the triangle that says it opens.
+ * The panel keeps no bottom padding while it is closed, so a shut card is
+ * one line tall and not a line in a box. */
+details.card > summary {
+  font-size: 1.125rem;
+  font-weight: 650;
+  line-height: 1.25;
+  cursor: pointer;
+  min-height: 2rem;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+details.card > summary:hover { color: var(--accent); }
+details.card:not([open]) { padding-top: 0.625rem; padding-bottom: 0.625rem; }
+details.card[open] > summary { margin-bottom: 0.75rem; }
+/* Beside a card title this is the count of what is in the card ("8 events",
+ * "counted just now") - the first thing the card is read for. Muted, but
+ * full size. */
+.card-meta { color: var(--muted); }
+/* A sentence under ONE card, about that card - not `.page-purpose`, which is
+ * the one sentence a whole page opens with and which
+ * tests/ui/test_dashboard_view.py addresses by that class alone. A second
+ * element carrying it turned a strict locator into a two-element match. */
+.card-note { color: var(--muted); margin: 0.5rem 0 0; }
+
+.stat-tile {
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-lg);
+  padding: 0.875rem var(--gap);
+  min-width: 0;
+}
+.stat-label { margin: 0 0 0.25rem; color: var(--muted); font-weight: 500; }
+.stat-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  margin: 0;
+}
+.stat-periods {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.25rem;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.stat-periods li { display: flex; flex-direction: column; min-width: 0; }
+.stat-periods dt, .stat-periods .k { color: var(--muted); }
+.stat-periods dd, .stat-periods .v { margin: 0; font-variant-numeric: tabular-nums; font-weight: 600; }
+
+/* ── Lists (activities, events) ───────────────────────────────────────── */
+
+.list { margin: 0; padding: 0; list-style: none; }
+.list-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.25rem 1rem;
+  padding: 0.625rem 0;
+  border-top: 1px solid var(--line-soft);
+  min-height: var(--control-h);
+  align-items: baseline;
+}
+.list-item:first-child { border-top: 0; }
+.list-title { font-weight: 600; margin: 0; }
+.list-sub { color: var(--muted); margin: 0; grid-column: 1 / -1; }
+.list-time { color: var(--muted); white-space: nowrap; }
+
+.tag {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* ── Tables ───────────────────────────────────────────────────────────── */
+
+.table-scroll { overflow-x: auto; max-width: 100%; }
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.table th, .table td {
+  text-align: left;
+  padding: 0.5rem 0.625rem;
+  border-bottom: 1px solid var(--line-soft);
+  vertical-align: top;
+}
+.table th {
+  background: var(--surface-2);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.table td.num, .table th.num { text-align: right; }
+.table tbody tr:hover { background: var(--accent-tint); }
+.table caption { text-align: left; color: var(--muted); padding: 0 0 0.5rem; }
+
+/* ── Forms ────────────────────────────────────────────────────────────── */
+
+.field { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; }
+.field-label, label { font-weight: 500; }
+.field-help { color: var(--muted); }
+/* A LINK INSIDE A HELP SENTENCE IS STILL A TARGET. WCAG 2.5.8 asks 24 px of
+ * every one, and a link in a 22 px line of small print is under it - the
+ * suite measures interactive elements everywhere and does not exempt prose.
+ * `inline-block` with a floor gives it the height without taking it out of
+ * the sentence it belongs to. */
+.field-help a { display: inline-block; min-height: 1.5rem; line-height: 1.5rem; }
+
+input[type="text"], input[type="search"], input[type="number"], input[type="date"],
+input[type="url"], input[type="email"], input[type="password"], select, textarea {
+  font: inherit;
+  font-size: 1rem;
+  color: var(--text);
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  min-height: var(--control-h);
+  padding: 0 0.75rem;
+  max-width: 100%;
+}
+textarea { padding: 0.5rem 0.75rem; min-height: calc(var(--control-h) * 2); }
+select { padding-right: 2rem; }
+input::placeholder, textarea::placeholder { color: var(--placeholder); opacity: 1; }
+input:disabled, select:disabled, textarea:disabled { background: var(--surface-2); color: var(--muted); }
+
+input[type="checkbox"], input[type="radio"] {
+  width: 1.375rem;
+  height: 1.375rem;
+  margin: 0 0.5rem 0 0;
+  accent-color: var(--accent);
+  vertical-align: middle;
+}
+input[type="color"] { min-height: var(--control-h); width: var(--control-h); padding: 0.25rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--white); }
+input[type="range"] { accent-color: var(--accent); min-height: var(--control-h); }
+
+.check, .radio {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-h);
+  padding-right: 0.5rem;
+  cursor: pointer;
+}
+
+/* THE HAND SAYS "THIS DOES SOMETHING".
+ *
+ * A control that answers a click while the pointer stays an arrow reads as
+ * decoration until somebody clicks it by accident. Buttons and links carry
+ * the hand already; these are the ones that were left out - a disclosure
+ * triangle, a tab, a tile that is a link, a legend row that filters, a cell
+ * of a table that opens a drill-down, a suggestion in a list. */
+summary,
+[role="tab"],
+[role="option"],
+.nav-button,
+.stat-tile--link,
+.cell-button,
+.legend-toggle,
+label[for] { cursor: pointer; }
+summary:disabled, [aria-disabled="true"] { cursor: not-allowed; }
+
+/* A FIELDSET GROUPS; IT DOES NOT FRAME.
+ *
+ * Where / What / When on the Query page were three bordered boxes inside a
+ * bordered card, and the fields inside them carry borders of their own -
+ * three frames around one thought. The legend names the group and the
+ * whitespace separates it, which is what a frame was for; a border on top
+ * of that is one more line to look at and nothing more to read. */
+/* ── A status pill ────────────────────────────────────────────────────────
+ *
+ * "Crawler online", "robots.txt forbids the list page", "sent". A word and, when
+ * a colour carries meaning, a dot beside it - never the colour alone.
+ * Shared by the Watchlist and by the heartbeat widgets in the page header. */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-height: 28px;
+  padding: 0.125rem 0.625rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 1rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.pill--ok { background: var(--ok-tint); border-color: var(--ok); color: var(--ok); }
+.pill--warn { background: var(--warn-tint); border-color: var(--warn); color: var(--warn); }
+.pill--error { background: var(--error-tint); border-color: var(--error); color: var(--error); }
+.pill--off { background: var(--surface-2); border-color: var(--line); color: var(--muted); }
+.pill-dot { font-size: 0.75em; line-height: 1; }
+
+fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+legend { font-weight: 600; padding: 0; }
+
+/* ── TOOLBARS: ONE ROW, ONE RULE ──────────────────────────────────────── */
+/*
+ *  A toolbar is a row of controls that has to LINE UP, and the rule is not
+ *  a matter of taste - tests/ui/test_toolbar_alignment.py measures it on
+ *  every view at 1440x900 and 1024x768:
+ *
+ *    every control in a row is the same height (--control-h) and their
+ *    boxes share a top and a bottom edge;
+ *    a label sits ABOVE its control, never beside one control and above
+ *    another in the same row;
+ *    all labels in a row share one baseline, all controls the next;
+ *    a group with NO label still occupies the label row, so it cannot
+ *    float up and sit higher than its neighbours;
+ *    a button that acts on the row sits on the control baseline, not
+ *    below it;
+ *    and the order is the same everywhere: what is searched, then how it
+ *    is narrowed, then the action.
+ *
+ *  HOW IT IS HELD. The row is top-aligned and the label row has a FIXED
+ *  height, so every control starts at the same y whatever is above or
+ *  below it. Bottom-alignment (which this was) looks identical until one
+ *  field carries a hint under it - then that field's control is pushed up
+ *  by the height of the hint and the row is crooked, which is exactly the
+ *  Map toolbar this rule came from. An item with no label of its own
+ *  is given the label row as a margin instead.
+ *
+ *  NO overflow here, ever: the typeahead list opens from inside a toolbar
+ *  and any overflow on an ancestor clips it silently. */
+.toolbar {
+  /* The two numbers the label row is made of. A toolbar with tighter rows
+   * (the Log spends every pixel above the list) overrides --label-gap and
+   * everything below follows, because the margin is computed from them. */
+  --label-h: 1.5rem;      /* one line of 16 px text at line-height 1.5 */
+  --label-gap: 0.25rem;
+  --label-block: calc(var(--label-h) + var(--label-gap));
+
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.5rem 0.75rem;
+}
+/* `:where()` through the whole block: no specificity at all, so this is
+ * the floor of the rule and a view's stylesheet governs its own widths
+ * without having to out-specify the design system. What a view may NOT do
+ * is change the label height without changing --label-h, because the
+ * margin below is computed from it. */
+.toolbar > * { min-width: 0; }
+.toolbar :where(.field) { flex: 1 1 14rem; gap: var(--label-gap); }
+
+/* The label row: one line, the same height in every column of the row,
+ * whether it is a <label>, a <span> that names a group or a <legend>.
+ *
+ * `:where()` on purpose - it carries NO specificity, so this is the floor
+ * and a view's own stylesheet can still say something about its labels
+ * without having to out-specify the design system. What it must not do is
+ * give them a DIFFERENT height from --label-h: the margin that puts an
+ * unlabelled cell on the control line is computed from that variable, so a
+ * view that overrides one and not the other pulls its own row apart. Set
+ * --label-h on the toolbar instead, and everything follows. */
+.toolbar :where(.field-label, .field > label, legend),
+.toolbar > :where(label:not(.check):not(.radio):not(.visually-hidden)) {
+  display: block;
+  min-height: var(--label-h);
+  line-height: var(--label-h);
+  margin: 0;
+}
+
+/* A CELL THAT CAME WITHOUT A LABEL STILL OCCUPIES THE LABEL ROW, so it
+ * cannot float up and sit higher than its neighbours - which is what a
+ * checkbox group in a row of labelled fields would otherwise do. It borrows
+ * the row as a top margin and its control lands on the control baseline.
+ *
+ * Only in a toolbar that HAS a label row: a row of four date presets has
+ * no labels at all, and 28 px of nothing above it would be a line of the
+ * page spent on a rule that has nothing to line up with. A visually-hidden
+ * label does not count - it is not on the screen, so it is not a row.
+ *
+ * `:has()` is what asks that question, and a browser without it simply
+ * drops this rule: unlabelled cells then sit at the top of the row, which
+ * is where they sat before any of this. Nothing else depends on it. */
+.toolbar:has(> :where(.field-label, legend, label:not(.check):not(.radio):not(.visually-hidden)),
+             > * > :where(.field-label, legend, label:not(.check):not(.radio):not(.visually-hidden)))
+  > :where(.button, button, input, select, textarea, .segmented, .check, .radio, .chips-box, .row,
+           .field:not(:has(> label, > .field-label, > legend))) {
+  margin-top: var(--label-block);
+}
+
+/* ── Buttons ──────────────────────────────────────────────────────────── */
+
+/* THE SELECTOR IS `.button` AND NOTHING ELSE.
+ *
+ * Not `.button, button.button, summary.button`: that makes the base rule
+ * (0-1-1 through `button.button`) outrank every variant below it (0-1-0),
+ * and a <button class="button button--secondary"> is painted as a primary
+ * button. On a "by entity / by type" switch the unpressed half then looks
+ * pressed, and the control says nothing at all.
+ *
+ * The element names are not needed. A class selector already beats the
+ * browser's own button styling, whatever its specificity, because author
+ * rules win over the user-agent sheet. So: do not put them back. */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  min-height: var(--control-h);
+  min-width: var(--control-h);
+  padding: 0 1rem;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--on-accent);
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  list-style: none;  /* summary */
+}
+.button:hover { background: var(--accent-strong); border-color: var(--accent-strong); color: var(--on-accent); }
+.button:disabled, .button[aria-disabled="true"] { opacity: 0.55; cursor: not-allowed; }
+
+.button--secondary {
+  background: var(--white);
+  color: var(--accent);
+  border-color: var(--line);
+}
+.button--secondary:hover { background: var(--accent-tint); color: var(--accent-strong); border-color: var(--accent); }
+
+.button--danger { background: var(--error); border-color: var(--error); }
+.button--danger:hover { background: #7f1a14; border-color: #7f1a14; }
+
+.button--quiet {
+  background: transparent;
+  border-color: transparent;
+  color: var(--accent);
+}
+.button--quiet:hover { background: var(--surface-2); color: var(--accent-strong); }
+
+/* The quiet button that removes something - a bucket, a colour group, a
+ * source, the ticks in a dialog. It is a modifier ON TOP of .button--quiet:
+ * a delete as loud as the save beside it gets pressed by mistake, so this
+ * one is grey until the pointer or the keyboard is on it. --error is 7.4:1
+ * on white, and the colour is never the only carrier - the label says
+ * "Delete". Three views use it (buckets, colours, sources). */
+.button--remove { color: var(--error); }
+.button--remove:hover,
+.button--remove:focus-visible {
+  background: var(--error-tint);
+  border-color: var(--error);
+  color: var(--error);
+}
+
+/* A button that stands INSIDE a sentence: "Show only Apple Inc." beside the
+ * notice that explains why the answer is wider than the term
+ * (static/js/resolved.js). Sizing only - the colours stay those of
+ * .button--secondary, which are measured. A 44 px control in a line of
+ * 15 px text would make the line three times its own height and read as a
+ * toolbar that has fallen into the paragraph; 28 px clears WCAG 2.5.8's
+ * 24 px and still sits in the text. */
+.button--inline {
+  min-height: 0;
+  min-width: 0;
+  padding: 0.25rem 0.625rem;
+  font-size: 0.9375rem;
+  white-space: normal;
+  align-self: center;
+}
+
+.button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+
+/* Segmented groups (levels 1-3, by entity / by type). */
+.segmented { display: inline-flex; flex-wrap: wrap; gap: 0; }
+.segmented .button { border-radius: 0; margin-left: -1px; }
+.segmented .button:first-child { border-radius: var(--radius) 0 0 var(--radius); margin-left: 0; }
+.segmented .button:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
+
+summary.button::-webkit-details-marker { display: none; }
+summary.button::after { content: " ▾"; }
+
+/* Print / Export in the top bar. The menu drops over the content. */
+.print-export { display: flex; align-items: center; gap: 0.5rem; position: relative; }
+.export-menu { position: relative; }
+.export-menu-items {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  min-width: 13rem;
+  padding: 0.375rem;
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+}
+.export-item {
+  display: flex;
+  align-items: center;
+  min-height: var(--control-h);
+  padding: 0 0.75rem;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.export-item:hover { background: var(--accent-tint); color: var(--accent-strong); }
+.export-notice { margin: 0.25rem 0.5rem; color: var(--muted); }
+.export-notice:empty { display: none; }
+
+/* ── Chips (chips.js) ─────────────────────────────────────────────────── */
+
+.chips-box {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+  min-height: var(--control-h);
+  padding: 0.25rem 0.5rem;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.chips-box:focus-within { outline: 3px solid var(--focus); outline-offset: 2px; }
+.chips-list { display: contents; }
+
+/* NOT AN INPUT INSIDE AN INPUT.
+ *
+ * `.chips-box` is the field: white, bordered, rounded, 44 px. The text
+ * input inside it is only the place the caret goes, so it carries none of
+ * that - and saying `border: 0` is not enough to make it so. The base rule
+ * above is `input[type="text"], …` (0-1-1: a type and an attribute) and a
+ * plain `.chips-input` is 0-1-0, so the ordinary field styling would win on
+ * every one of those properties whatever the order in this file: a white
+ * bordered 44 px box drawn inside a white bordered box, which makes the
+ * whole field 54 px and knocks it out of the row it shares with the
+ * address field and the two dates.
+ *
+ * So the selector names the box as well (0-2-0) and wins on its own
+ * terms. Do not weaken it back to one class. tests/ui/test_query_layout.py
+ * measures both halves: no border and no background of its own, and the
+ * field 44 px like its neighbours. */
+.chips-box .chips-input {
+  flex: 1 1 8rem;
+  min-width: 6rem;
+  min-height: calc(var(--control-h) - 0.75rem);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0 0.25rem;
+}
+.chips-input:focus-visible { outline: none; box-shadow: none; }
+/* .chips-help is gone: the sentence moved behind the info icon beside the
+ * label and is styled as .hint-bubble. */
+/* With chips in the box the text field is a small tail on the right;
+ * without, it is the whole box so the placeholder reads as the caption. */
+.chips.has-chips .chips-input { flex-basis: 6rem; }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 2rem;
+  padding: 0 0.25rem 0 0.625rem;
+  background: var(--accent-tint);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  color: var(--accent-strong);
+  list-style: none;
+}
+.chip-text { padding-right: 0.125rem; }
+.chip-remove {
+  min-width: 1.75rem;
+  min-height: 1.75rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.chip-remove:hover { background: var(--accent); color: var(--on-accent); }
+
+/* Chips used as links (event entities → diagrams / graph). */
+a.chip { text-decoration: none; padding-right: 0.625rem; }
+a.chip:hover { background: var(--accent); color: var(--on-accent); }
+
+/* ── Tabs (diagrams) ──────────────────────────────────────────────────── */
+
+[role="tablist"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  border-bottom: 2px solid var(--line-soft);
+}
+[role="tab"] {
+  min-height: var(--control-h);
+  padding: 0 1rem;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  background: transparent;
+  font: inherit;
+  font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+}
+[role="tab"]:hover { background: var(--surface-2); }
+[role="tab"][aria-selected="true"] { border-bottom-color: var(--accent); color: var(--accent-strong); font-weight: 650; }
+
+/* ── Dialogs (drilldown.js, map enlarge) ──────────────────────────────── */
+
+dialog.dialog {
+  width: min(48rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  padding: 0;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  color: var(--text);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+}
+dialog.dialog:not([open]) { display: none; }
+dialog.dialog--wide { width: min(90rem, calc(100vw - 2rem)); height: calc(100vh - 2rem); }
+dialog::backdrop { background: rgba(20, 30, 50, 0.55); }
+
+/* ── HOW A DIALOG ARRIVES ──────────────────────────────────────────────
+ *
+ * Not by simply appearing. One frame a page and the next a panel over it,
+ * on a drilldown opened from a bar halfway down a long page, reads as a
+ * jump rather than as something opening - the eye has no idea where the
+ * panel came from or that the page is still underneath.
+ *
+ * So it grows into place, the way a window does on a Mac: from 96% and a
+ * few pixels low, to its own size, while the backdrop darkens behind it.
+ * The curve is the important part - fast out of the gate and slow into the
+ * stop (a cubic-bezier with a long tail) - because that is what reads as a
+ * thing settling rather than as a slide at constant speed.
+ *
+ * 180 ms, not 300: a dialog is opened to be read, and an animation one can
+ * WAIT for is a delay wearing a costume. At this length it is felt and not
+ * watched.
+ *
+ * It runs on open only. Closing a <dialog> takes it out of the top layer in
+ * the same frame, so an exit needs `@starting-style` and discrete
+ * transitions, which are newer than the browsers this product is held to -
+ * and a panel that vanishes on close is what every reader already expects.
+ *
+ * AND NOT AT ALL FOR SOMEBODY WHO HAS ASKED FOR LESS MOTION: the setting
+ * exists for people whom movement makes ill, and there is nothing here that
+ * the still version fails to say. */
+@keyframes dialog-arrives {
+  from { opacity: 0; transform: scale(0.96) translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes backdrop-arrives {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+dialog.dialog[open] {
+  animation: dialog-arrives 180ms cubic-bezier(0.2, 0.9, 0.25, 1);
+  /* The panel scales from its own middle, which is where a reader's eye
+     already is - from a corner it would look like it slid in from there. */
+  transform-origin: center center;
+}
+dialog.dialog[open]::backdrop { animation: backdrop-arrives 180ms ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  dialog.dialog[open],
+  dialog.dialog[open]::backdrop { animation: none; }
+}
+
+/* A GRID, BECAUSE A WRAPPED TITLE MUST NOT MOVE THE X.
+ *
+ * Not a flex line with `flex-wrap: wrap`: a wrapped header is exactly what
+ * happens to a stacked drilldown - "Connection matrix - Springfield Works -
+ * Nordwyk Pumps (Springfield)" is three lines in an 832 px dialog, and a
+ * close button that `order: 2` is supposed to keep on the right starts the
+ * NEXT line at flex-start, 767 px from the right edge and 69 px down the
+ * box. `order` sorts items within a line; it says nothing about which line
+ * they land on.
+ *
+ * Two columns settle it: the title takes the first, the X the second,
+ * and the subtitle spans both underneath. A title of any length wraps
+ * inside its own column and the button cannot leave the corner. */
+.dialog-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.25rem 1rem;
+  padding: 0.875rem var(--gap);
+  border-bottom: 1px solid var(--line-soft);
+}
+.dialog-title { grid-column: 1; grid-row: 1; margin: 0; font-size: 1.25rem; min-width: 0; }
+.dialog-subtitle { grid-column: 1 / -1; grid-row: 2; margin: 0; color: var(--muted); }
+/* THE X, TOP RIGHT, IN EVERY DIALOG.
+ *
+ * It is a real button with the accessible name "Close", it is at least
+ * 44 px in both directions (WCAG 2.5.8, and it is the control a person
+ * reaches for in a hurry), and it is in the same corner of every dialog in
+ * the product: the second grid column of the first row, whatever the title
+ * does. `align-self: start` pins it to the top of that row, so it is the
+ * same distance below the top edge in a one-line header and in a three-
+ * line one. The glyph is decoration: the name comes from aria-label, so a
+ * screen reader says "Close" and not "multiplication sign". */
+.dialog-close {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--control-h);
+  min-width: var(--control-h);
+  padding: 0 0.875rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--white);
+  color: var(--accent);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+.dialog-close:hover { background: var(--accent-tint); }
+.dialog-close .dialog-x { font-size: 1.375rem; line-height: 1; }
+
+/* A SECOND DIALOG OPENS OVER THE FIRST, and the first stays open
+ * underneath: a person exploring one chart must not lose it to see a
+ * detail. Native <dialog> stacks in the browser's top layer in OPEN ORDER,
+ * so there is no z-index arithmetic here and there must not be any - a
+ * z-index on a dialog does nothing in the top layer and reads as if it
+ * did. What the second one does need is a backdrop that does not paint the
+ * first one black: half the tint, because it is drawn over a backdrop that
+ * is already there. js/dialog.js sets the attribute. */
+dialog.dialog[data-depth="2"]::backdrop { background: rgba(20, 30, 50, 0.28); }
+.dialog-body { padding: var(--gap); overflow: auto; flex: 1 1 auto; min-height: 0; }
+.dialog-footer, .dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem var(--gap);
+  border-top: 1px solid var(--line-soft);
+}
+/* A footer that HOLDS the actions must not draw the line twice. The rule
+ * above is written for two shapes - a <footer class="dialog-footer"> and a
+ * bare <div class="dialog-actions"> used as one - and js/dialog.js nests
+ * the second inside the first, which drew a second border-top across the
+ * right-hand half of the footer and a second lot of padding under it. */
+.dialog-footer > .dialog-actions { border-top: 0; padding: 0; }
+.dialog-status { color: var(--muted); margin-right: auto; }
+
+.drilldown-rows { margin: 0; padding: 0; list-style: none; }
+.drilldown-row { padding: 0.5rem 0; border-top: 1px solid var(--line-soft); }
+.drilldown-row:first-child { border-top: 0; }
+.drilldown-empty { color: var(--muted); padding: 1rem 0; }
+.drilldown-sentinel { height: 1px; }
+/* "Load more" IS A FOOTER ACTION, so it takes the footer's alignment and
+ * nothing of its own.
+ *
+ * No `margin: 0.75rem auto 0` of the kind a block button under the rows
+ * would carry: inside `.dialog-actions`, `align-items: center` would centre
+ * a 56 px margin box around a 44 px button, and "Load more" would sit 6 px
+ * below "Download CSV" and "Close" in every drilldown - the same
+ * misalignment the toolbar rule exists to prevent, inside a dialog. `auto`
+ * on the sides would do the same sideways.
+ * tests/ui/test_toolbar_alignment.py measures inside dialogs as well. */
+.dialog-more { margin: 0; }
+
+/* ── The way out to Xtracting, in the top bar ─────────────────────────────
+ *
+ * The word, then the arrow that says it opens a new tab - the same order and
+ * the same promise as every other outward link in the product (the map's
+ * popup buttons, the drilldown's rows). It sits at the end of the control
+ * row rather than beside the brand: the brand is the way to the archive's
+ * own home, and two links a few pixels apart that go to different products
+ * is the confusion this is meant to end. */
+/* ── The gate ─────────────────────────────────────────────────────────────
+ *
+ * One card in the middle of an empty page. It carries no navigation, no
+ * project name and nothing else that would say what is behind it, so there
+ * is nothing here to lay out but the box itself. */
+.gate-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: var(--gap);
+  background: var(--surface-2, #f4f5f7);
+}
+.gate-card {
+  width: 100%;
+  max-width: 26rem;
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-lg);
+  padding: 1.75rem 1.5rem;
+}
+.gate-card h1 { margin: 0 0 0.25rem; }
+.gate-card .muted { margin: 0 0 1.25rem; }
+.gate-card form { display: grid; gap: 1rem; }
+.gate-card .button { justify-self: start; }
+.gate-error { margin: 0 0 1rem; }
+/* Full width and 44 px tall like every other control in the product: this is
+ * the first thing anybody touches, and it is the one page where getting the
+ * target size wrong locks somebody out rather than annoying them. */
+.gate-input {
+  width: 100%;
+  min-height: var(--control-h, 2.75rem);
+  padding: 0 0.625rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+.gate-input:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+/* Cloudflare draws its widget at a fixed 300 px; let it, and keep it from
+ * pushing the card wider on a phone. */
+.gate-card .cf-turnstile { max-width: 100%; overflow: hidden; }
+
+.topbar-out { display: inline-flex; align-items: center; gap: 0.375rem; }
+.topbar-out .icon { flex: none; width: 16px; height: 16px; }
+
+/* ── Legend panel (legend.js) ─────────────────────────────────────────── */
+/*
+ * An ordinary block in the page's own grid column - never positioned, so
+ * it cannot cover the graph, the suggestion list or the detail panel (a
+ * legend that floats over a map ends up on top of it). Rows are buttons when a
+ * group can be hidden; the swatch colour arrives as the --swatch variable.
+ */
+
+.legend {
+  padding: 0.75rem var(--gap);
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-lg);
+}
+.legend-title { margin: 0 0 0.5rem; font-size: 1rem; font-weight: 650; }
+.legend-list { margin: 0; padding: 0; list-style: none; }
+.legend-row { display: flex; align-items: center; min-height: 2.5rem; }
+.legend-row > .legend-swatch,
+.legend-row > .legend-name,
+.legend-row > .legend-count { margin-left: 0.5rem; }
+.legend-toggle {
+  display: flex;
+  /* NO `width: 100%`, AND THE BASIS STAYS `auto`. The row WRAPS now - it
+     has to, because the ⓘ's bubble takes a line of its own - and both
+     halves of that are decided here.
+
+     `width: 100%` made the toggle's base size the whole row, which pushed
+     the ⓘ beside it onto a second line before the browser would shrink
+     anything. Gone, the toggle asks for its content and shrinks (min-width:
+     0) to leave the 24 px the button needs.
+
+     And the basis is NOT 0, although that shrinks more readily still: a
+     0-base toggle plus a 100%-base bubble add up to exactly the width of the
+     row, so the two share a LINE - and the toggle, with no free space left
+     to grow into, comes out 0 px wide. On screen the bubble is
+     `display: none` and nothing shows it; on PAPER every bubble is shown
+     (below), and the legend printed as a column of blank rows - measured,
+     at 1440: the toggle 0 px inside a 132 px row. With the base at content
+     width the sum is over 100% and the bubble wraps, which is where it
+     belongs. */
+  flex: 1 1 auto;
+  min-width: 0;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: var(--control-h);
+  padding: 0 0.5rem;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.legend-toggle:hover { background: var(--surface-2); }
+.legend-swatch {
+  flex: 0 0 auto;
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  background: var(--swatch, #777);
+}
+/* Shrinks rather than wrapping, for the same reason as the toggle. */
+.legend-name { flex: 1 1 auto; min-width: 0; }
+.legend-count { color: var(--muted); font-variant-numeric: tabular-nums; }
+/* THE ⓘ ON A LEGEND ROW, and the bubble it opens (legend.js: hintPair).
+ *
+ * The sentence is not only the row's `title=` - a tooltip needs a mouse,
+ * which is the one thing this product says content may never depend on.
+ *
+ * IT IS NOT A BUTTON, AND THE ROW DOES NOT WRAP. A ⓘ that opens a bubble
+ * taking a line of its own means the row has to be allowed to wrap - and on
+ * a narrow panel the mark itself then drops onto a second line under the
+ * name it belongs to, which is a key that has come apart. The sentence is
+ * the row's tooltip and part of the accessible name of its control
+ * (static/js/legend.js), so there is no third child to make room for and
+ * the row stays one line. */
+.legend-row { flex-wrap: nowrap; }
+/* Hidden = the group is switched off; more than a colour change, so it
+ * reads without colour: struck through and dimmed. */
+.legend-row.is-hidden .legend-name { text-decoration: line-through; }
+.legend-row.is-hidden .legend-swatch { opacity: 0.35; }
+.legend-row.is-hidden { color: var(--muted); }
+.legend-row.is-highlighted .legend-toggle,
+.legend-row.is-highlighted { background: var(--accent-tint); border-radius: var(--radius); }
+.legend-row.is-highlighted .legend-name { font-weight: 650; }
+.legend-empty { color: var(--muted); padding: 0.5rem 0; }
+/* WHY EVERY ROW IS THE SAME COLOUR, said once under the list (legend.js
+ * ungroupedNote, and the same line under the Map's type checklist and the
+ * Graph's Details panel). It replaces a swatch column, so it carries the
+ * weight of one: the page's text colour rather than the muted grey a side
+ * remark takes, because it is the only thing on screen saying that the
+ * colour coding is not switched on yet. */
+.legend-note {
+  margin: 0.5rem 0 0;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--line-soft);
+  color: var(--text);
+}
+
+/* ── Timeframe toolbar (_macros.html timeframe_toolbar) ───────────────── */
+
+.timeframe-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.timeframe-toolbar .button { min-width: var(--control-h); padding-inline: 0.5rem; }
+.timeframe-select { min-width: 11rem; }
+.timeframe-caption { color: var(--muted); }
+
+/* ── Toasts (a11y.js) ─────────────────────────────────────────────────── */
+
+/* BOTTOM CENTRE, not a corner. A message about the page belongs where the
+ * eye returns between actions - the middle - and a corner puts it where a
+ * reader who is working in the middle of a long form never looks. Fixed,
+ * so nothing on the page moves when one arrives. */
+.toasts {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 1.25rem;
+  align-items: stretch;
+  /* ABOVE THE MAP. Leaflet stacks its own panes from z-index 400 (tiles) to
+   * 800 (popups), and a map container that does not open a stacking context
+   * of its own hands those numbers straight to the root - where they outrank
+   * anything the page paints on top. At 60 the error toast was drawn BEHIND
+   * the map card in the corner it is fixed to, and read "the date r…".
+   *
+   * Every map view is asked to confine its container (`position: relative;
+   * z-index: 0`), and that is the real fix; this is the belt to that
+   * braces, for the next map that forgets. 1000 is above Leaflet's highest
+   * pane and below nothing the page has - a <dialog> is in the browser's top
+   * layer and is not competing on z-index at all. */
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: min(38rem, calc(100vw - 2rem));
+}
+.toast {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.25rem 0.75rem;
+  align-items: start;
+  padding: 0.75rem 0.875rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 6px solid var(--accent);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+}
+.toast--error { border-left-color: var(--error); background: var(--error-tint); }
+.toast--success { border-left-color: var(--ok); background: var(--ok-tint); }
+.toast--warn { border-left-color: var(--warn); background: var(--warn-tint); }
+.toast-text { margin: 0; font-weight: 600; }
+.toast-hint { margin: 0; grid-column: 1; color: var(--muted); }
+/* The way to the thing the message is about. 44 px, because a message that
+ * names a page and cannot take you to it is a message that wasted the reader's
+ * attention twice. */
+.toast-action {
+  grid-column: 1;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-h);
+  font-weight: 700;
+}
+/* THE X, TOP RIGHT, AND BIG ENOUGH TO HIT.
+ *
+ * `align-self: start` is what puts it in the CORNER rather than beside the
+ * middle of the message: a toast with a hint and an action is three lines
+ * tall, and a centred button then sits opposite the hint instead of the
+ * heading. 2.75 rem square is above the 44 px this product holds its primary
+ * targets to, and quiet - no border, no fill - because it competes with the
+ * sentence it closes and should lose. */
+.toast-close {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  align-self: start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  margin: -0.375rem -0.25rem 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.toast-close svg { width: 1.5rem; height: 1.5rem; display: block; }
+.toast-close:hover { background: var(--surface-2); color: var(--text); }
+.toast-close:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* A STACK THAT CANNOT PUSH ITSELF OFF THE SCREEN. Toasts stack now, and
+ * twenty of them would run past the top of the window with the oldest - the
+ * one that says what started it all - unreachable. The column is capped at
+ * most of the viewport and scrolls inside itself instead. */
+.toasts {
+  max-height: calc(100vh - 3rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* THE MARK THAT SAYS THE SWITCH IS PROMISING NOTHING.
+ *
+ * On a row whose "Crawl on a schedule" is on while scheduled crawling is off,
+ * or while no crawler has reported in. It has to be visible and it may not
+ * change the height of a single row - twenty rows that grow by a line are
+ * twenty rows that no longer line up, which is why these cards carry no
+ * advice sentence either.
+ *
+ * So: absolutely positioned against the label, out of the flow entirely. The
+ * label keeps a little room on its right for it, which is the only geometry
+ * this costs and it costs it on every row equally - reserved in sources.css
+ * (`.source-side .enable-check`), NOT here: that file loads after this one and
+ * sets `padding` as a shorthand, so a `padding-right` written here is
+ * overwritten before it reaches the screen.
+ *
+ * NOT COLOUR ALONE. The mark is an exclamation with a real accessible name on
+ * it, and the title says the whole sentence - a reader who cannot tell amber
+ * from grey still has the fact, and so does a screen reader. */
+.enable-check { position: relative; }
+.enable-warn {
+  position: absolute;
+  /* Off the edge, not against it. At `right: 0` the mark sits on the box's own
+   * border - it reads as part of the frame rather than as something inside the
+   * control, with no white around it to see it by. This is the same
+   * 0.5rem the box keeps on its left, so it sits in from the edge exactly as
+   * far as the tick box does on the other side. */
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 999px;
+  background: var(--warn-tint);
+  border: 1px solid var(--warn);
+  color: var(--warn);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: help;
+}
+
+/* ── Status messages and loading ──────────────────────────────────────── */
+
+.notice {
+  display: flex;
+  gap: 0.625rem;
+  align-items: flex-start;
+  padding: 0.75rem var(--gap);
+  border: 1px solid var(--line-soft);
+  border-left: 6px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+/* THE NOTICE THAT SITS ABOVE A RESULT, AND MUST NOT PUSH IT OFF THE SCREEN.
+ *
+ * The "…belongs to the bucket…" line on Events, Diagrams and the Graph
+ * carries a 28 px button (.button--inline), and with the notice's usual
+ * 0.75 rem of padding that made a 52 px band where a 44 px line of text had
+ * been - eight pixels that the first chart on a 1024x768 Diagrams page does
+ * not have to spare (tests/ui/test_diagrams_q_preserved.py). Half the
+ * padding puts the button back inside the height the sentence had on its
+ * own. */
+.notice--tight { padding: 0.5rem var(--gap); }
+
+.notice--ok { border-left-color: var(--ok); background: var(--ok-tint); }
+.notice--warn { border-left-color: var(--warn); background: var(--warn-tint); }
+.notice--error { border-left-color: var(--error); background: var(--error-tint); }
+/* A STATEMENT THE READER HAS TO KNOW, WHICH IS NOT A PROBLEM.
+ *
+ * The three above all say something went, or could go, wrong; this one says
+ * something true that the control beside it does not imply. It exists for
+ * the sentence under "Follow this site's robots.txt" in the watched-page
+ * editor - permission to fetch is not permission to use the text - which as
+ * a grey remark under a tick box would read as help for the tick box. It is
+ * not help: it is the law, and it applies whichever way the tick is set. So it
+ * keeps the accent, which is this product's neutral, and it is never hidden
+ * behind an info icon the way an explanation of a control is. */
+.notice--info { border-left-color: var(--accent); background: var(--accent-tint); }
+.notice p { margin: 0; }
+/* The glyph a notice leads with. Same size and rhythm as `.verdict-icon` in
+ * sources.css, which is the same idea in a card. aria-hidden, always: the
+ * sentence beside it says what the box is, and a screen reader that reads out
+ * "circled Latin small letter i" has been told nothing. */
+.notice-icon { flex: none; font-size: 1.25rem; line-height: 1.3; }
+
+.empty { color: var(--muted); padding: 1rem 0; }
+
+/* ── NOTHING TO DRAW ──────────────────────────────────────────────────────
+ *
+ * The answer a chart gives when its period holds no rows, and it stands
+ * WHERE THE PICTURE WOULD HAVE STOOD: centred in both directions, with the
+ * glyph for an empty tray above the sentence.
+ *
+ * In app.css and not in a view's sheet because every chart in the product
+ * uses it - the eight Diagrams cards and the two on the landing page - and
+ * an empty card that looks different from one view to the next is two
+ * answers to one question.
+ *
+ * IT TAKES THE ROOM THE CARD HAS, RATHER THAN THE PLOT'S OWN HEIGHT.
+ * `flex: 1` inside the card (which is a flex column) fills whatever is left
+ * under the title, so beside a card that drew, the message sits in the
+ * middle of the same height - and on a card standing alone with nothing in
+ * it, the card is 8 rem rather than a reserved 17 rem of white. A blank plot
+ * box is not an empty chart; it is 272 px of nothing, and six of them made
+ * an empty period nearly three screens tall.
+ *
+ * Nothing else appears beside it: the control that opens the numbers is
+ * hidden while there are none, because a fold that opens on an empty table
+ * is a promise the card cannot keep. */
+.chart-empty {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 8rem;
+  padding: 1rem;
+  color: var(--muted);
+  text-align: center;
+}
+.chart-empty p { margin: 0; }
+/* Bigger than a button's glyph and paler than its own sentence: it is a
+ * picture of absence, not a control, and it must not read as the loudest
+ * thing on the card. */
+.chart-empty .icon {
+  width: 2.5rem;
+  height: 2.5rem;
+  opacity: 0.55;
+  stroke-width: 1.25;
+}
+
+/* While loading, the previous content stays and dims (NN/g: never replace
+ * a result with a spinner); the message says what is happening. */
+.is-loading { opacity: 0.6; }
+.loading { color: var(--muted); font-style: italic; }
+.loading::before {
+  content: "";
+  display: inline-block;
+  width: 0.9em;
+  height: 0.9em;
+  margin-right: 0.4em;
+  vertical-align: -0.1em;
+  border: 2px solid var(--line-soft);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.skeleton {
+  display: block;
+  height: 1.25em;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--surface-2) 25%, #e3e6eb 50%, var(--surface-2) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+@keyframes shimmer { to { background-position: -200% 0; } }
+
+/* ── Pagination ───────────────────────────────────────────────────────── */
+
+/* THE PAGER IS NOT PART OF THE LAST ROW. Flush against the results it read
+ * as one more entry of the list - "Previous 1 of 43,820 Next" sitting where
+ * a card should be - and a reader on the way down the page ran into it
+ * before noticing the list had ended. A gap the size of the one between the
+ * panels says what it is: the way to the next lot, after this lot. */
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line-soft);
+}
+/* THE GAP IS THE LIST'S, NOT THE PAGER'S. A `margin-top` here is overruled
+ * by the foot-of-card rule above (`.grid > .card > .pager { margin-top:
+ * auto }`), which resolves to nothing whenever the card has no slack - so
+ * the line sat flush against the last row and the pager read as one more
+ * entry of the list. The space belongs to the thing that ended. */
+.results > #results { margin-bottom: var(--gap); }
+.pager-info { color: var(--muted); }
+
+/* ── Utilities ────────────────────────────────────────────────────────── */
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; }
+.stack { display: flex; flex-direction: column; gap: 0.5rem; }
+.spread { justify-content: space-between; }
+.nowrap { white-space: nowrap; }
+.right { text-align: right; }
+
+/* Swatches for colour groups and legends: a border keeps a pale colour
+ * visible on white. */
+.swatch {
+  display: inline-block;
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  vertical-align: -0.2em;
+}
+
+mark { background: #fff1a8; color: var(--text); padding: 0 0.1em; border-radius: 2px; }
+
+/* THE SWITCH IS AS WIDE AS ITS TWO WORDS, and the field it governs starts
+ * straight after it.
+ *
+ * Without this the cell is a `.field` like any other and takes the
+ * toolbar's 14rem share, so the switch sat in 334 px of which 145 held
+ * anything and the field it belongs to began 160 px further along - the two
+ * halves of one question, with a hole between them.
+ *
+ * It lived twice, once per view (.diagrams-search and .map-toolbar), and
+ * the third view to grow a switch - Events - was simply forgotten. One rule
+ * for every toolbar that has one. */
+.toolbar > .axis-field { flex: 0 0 auto; }
+.axis-field .segmented { flex-wrap: nowrap; }
+
+/* THE ROW THAT SENDS A QUERY - one shape, on every view (_macros.html:
+ * search_actions). Under the fields and hard against the left edge, so the
+ * eye finds it in the same place whatever page it is on.
+ *
+ * The two spare declarations are deliberate: the forms it sits in are
+ * sometimes a wrapping FLEX row of fields (Sources, Buckets, Colours) and
+ * sometimes a GRID (Map, Heatmap, Logs). `flex-basis: 100%` puts it on its
+ * own line in the first, `grid-column: 1 / -1` spans it in the second, and
+ * each is ignored where it does not apply. Without them the button lands
+ * beside the last field on some pages and under it on others - which is the
+ * unevenness this row was made to end. */
+/* THE ATTRIBUTE IS IN THE SELECTOR ON PURPOSE. A view's own stylesheet is
+ * loaded after this one and several of them style "every child of my
+ * toolbar" - graph.css lays its children out as COLUMNS, which turned this
+ * row on its side and left the button in the middle of the field row. One
+ * class is not enough to survive that; class + attribute is, and it says
+ * why it is there. */
+.query-actions[data-search-actions] {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.75rem;
+  /* HALF A GAP, NOT A WHOLE ONE. The row belongs to the fields above it -
+   * it is the end of the same sentence - and a full --gap under a form that
+   * had already ended left a band of nothing between the last field and the
+   * way to send it, wide enough to read as a break between two things. The
+   * frame around the pair (`.filter-card`) is what separates the question
+   * from the answer now; inside it, nothing needs separating. */
+  margin-top: 0.5rem;
+  flex-basis: 100%;
+  grid-column: 1 / -1;
+}
+
+/* ── THE FRAME ROUND THE QUESTION ─────────────────────────────────────────
+ *
+ * ONE RULE, EVERY VIEW: what a reader can ASK is inside a frame, what the
+ * archive ANSWERS is in the cards below it. Two views had it and six did
+ * not, so the same page furniture read as a box on the Log and as loose
+ * controls floating on the background on the Map - and a form with no edge
+ * has no visible end, which is why the button that sends it looked stranded.
+ *
+ * It is not `.card`: a card is a panel of content with a title and a gap of
+ * padding, and this is a band of controls. The padding is tighter (the
+ * fields carry their own 44 px of height, so the frame does not need to add
+ * a whole gap on top of them) and there is no header. Everything else - the
+ * surface, the line, the radius - is the card's, because two shapes that
+ * differ slightly read as a mistake rather than as a distinction.
+ *
+ * A view that needs a tighter version says so in its own sheet (the Log
+ * does, and says why); nothing overrides the frame itself. */
+.filter-card {
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-lg);
+  padding: 0.75rem 1.25rem 0.875rem;
+  min-width: 0;
+  break-inside: avoid;
+}
+/* NO MARGIN OF ITS OWN. `.main` is a grid (above) and grid rows do not
+ * collapse margins - a `margin-bottom` here is added to the grid's gap
+ * rather than absorbed by it, and on Diagrams that pushes the first chart
+ * 16 px further down a screen it is already struggling to fit on. The gap
+ * between the question and the answer is the page's, not the frame's; a
+ * view that wants a different one says so in its own sheet, as the Log and
+ * the two map views do. */
+
+/* WORKING. The button keeps its word and goes quiet; the sentence beside it
+ * is what actually says so (static/js/api.js: searching). A dot that moves
+ * would be the only animation on the page and would say less. */
+.query-actions[data-search-actions] .button[aria-busy="true"] { opacity: 0.65; cursor: progress; }
+.query-status { margin: 0; color: var(--muted); }
+.query-status.is-blocking { color: var(--error); font-weight: 500; }
+
+/* ── The explanation of one control ───────────────────────────────────────
+ *
+ * An info icon beside the label, and the sentence it opens. The rule this
+ * follows is written four times elsewhere in this product: content may never
+ * live only in a hover, because a tooltip needs a mouse. So the icon is a
+ * button - pointer, click and keyboard all reach it - and the bubble is a real
+ * element with an id that the control points at with aria-describedby.
+ *
+ * SIZE. 24 px is the WCAG 2.5.8 floor for a secondary target and this is one:
+ * it sits beside a label, not in a row of controls, so layout_rules.py does not
+ * measure it against 44 px neighbours. The generous padding is what makes the
+ * 20 px glyph a 24 px target without pushing the label off its line. */
+.hint-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  margin-left: 0.375rem;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  vertical-align: text-bottom;
+}
+.hint-button .icon { width: 18px; height: 18px; display: block; }
+.hint-button:hover, .hint-button[aria-expanded="true"] { color: var(--accent-strong); }
+.hint-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The bubble reads UNDER the control, not under the label, so the reading order
+ * and the tab order agree: label, control, then what the control is for. The
+ * left border is what ties it to the field above it without a box that would
+ * make the form look like it has an error in it. */
+.hint-bubble {
+  margin: 0.25rem 0 0;
+  padding: 0.4rem 0.625rem;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 1rem;
+  max-width: 44rem;
+}
+.hint-bubble code { font-size: 0.9375em; }
+
+@media print {
+  /* On paper every explanation is shown: there is nothing to hover with, and a
+     printed form with its help missing is a form somebody has to come back to
+     the screen for. */
+  .hint-bubble[hidden] { display: block !important; }
+  .hint-button { display: none !important; }
+}
+
+
+/* ── IS ANYTHING RUNNING: two pills on the heading line ──────────────────
+ *
+ * The crawler and the collector, each with when it was last heard from and a
+ * dot that is green while it is running. On EVERY view, because "why has
+ * nothing arrived since lunchtime" is asked from whichever page the reader
+ * happens to be on, not only from the Watchlist.
+ *
+ * WHY THEY SIT INSIDE `.page-header` AND NOT BESIDE IT. Read the rule at
+ * `.page-about` above: a right-aligned sibling of the h1 moved as the heading
+ * changed length, so the one control that is on every page was never in the
+ * same place twice. `.page-header` is already a wrapping flex line with the
+ * disclosure held under it by `flex-basis: 100%`; `margin-left: auto` puts
+ * this at the far end of the TITLE's line, and when the two do not fit the
+ * strip wraps onto a line of its own instead of overlapping anything. That is
+ * the shape the Watchlist arrived at first (`sources.css: .sources-top`), and
+ * static/js/status.js puts the strip there rather than every template
+ * repeating it. */
+.service-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+/* The bubble hangs off this, so it must be the positioned ancestor. */
+.service-state { position: relative; }
+
+/* THE WHOLE PILL IS THE HINT BUTTON.
+ *
+ * `.hint-button` above draws a 24 px circle beside a label, because that is
+ * what an info icon is. Here the pill IS the button - hovering, clicking or
+ * tabbing to the whole thing opens the detail - so it keeps the pill's box
+ * and takes only the behaviour. Written as compound selectors on purpose:
+ * `.hint-button` comes later in this file than `.pill`, so a single class
+ * would lose the geometry AND the state colours to it. */
+.hint-button.pill {
+  width: auto;
+  height: auto;
+  margin-left: 0;
+  padding: 0.125rem 0.625rem;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--muted);
+  font: inherit;
+  font-weight: 600;
+}
+.hint-button.pill--ok    { background: var(--ok-tint);    border-color: var(--ok);    color: var(--ok); }
+.hint-button.pill--error { background: var(--error-tint); border-color: var(--error); color: var(--error); }
+.hint-button.pill--off   { background: var(--surface-2);  border-color: var(--line);  color: var(--muted); }
+/* The colour stays the STATE's colour when the pointer arrives - it is the
+ * answer, not an affordance - so the ring says "pressable" instead. */
+.hint-button.pill:hover,
+.hint-button.pill[aria-expanded="true"] { box-shadow: inset 0 0 0 2px currentColor; }
+
+/* A DRAWN CIRCLE, NOT THE CHARACTER "●". The dot repeats what the words in
+ * the pill already say (colour is never the only carrier), and a glyph
+ * would be a text node at 0.75em - below the 16 px floor that
+ * tests/ui/test_dashboard_view.py measures on every text node in `main`. */
+.hb-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: currentColor;
+}
+/* When it was last heard from. Same size as the state beside it and lighter
+ * in weight, never smaller: this is the half of the pill a reader actually
+ * compares against the clock. */
+.hb-seen { font-weight: 500; }
+.hb-seen:empty { display: none; }
+
+/* THE DETAIL HANGS BELOW, IT DOES NOT PUSH THE PAGE DOWN. In the flow it
+ * would widen the heading line and move the title sideways every time a
+ * pointer crossed a pill (app.css's fifth rule: nothing reserves room for
+ * words that are not there). Right-aligned to its own pill so it opens
+ * inwards from the edge of the page. */
+.service-hint {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.375rem);
+  z-index: 40;
+  width: max-content;
+  max-width: min(28rem, 78vw);
+  margin: 0;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  white-space: normal;
+  text-align: left;
+  font-weight: 400;
+}
+
+@media print {
+  /* Live state, on paper. The hint rules above would otherwise print the two
+   * detail bubbles and hide the pills they belong to. */
+  .service-status { display: none !important; }
+}

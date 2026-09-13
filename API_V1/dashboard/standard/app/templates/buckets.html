@@ -1,0 +1,221 @@
+{#- Buckets: the values that are searched as one.
+
+    Buckets are not kept in the browser - per browser they would be never
+    shared, lost with the cache, and invisible to the server that runs the
+    query. They are rows in the `dashboard` schema, so a bucket a
+    colleague made is a bucket everybody searches with, and app/scope.py
+    expands a term through it on every view.
+
+    A bucket has a KIND. It began as "several spellings of one entity" and it
+    is the same problem everywhere else: an archive built from free text
+    calls one type, one place, one unit several names, and in a bilingual
+    archive it does so twice over - "Company" and "Unternehmen" are two rows
+    in entity_types, so every type search and every "by type" chart splits
+    one thing in half until somebody says they are the same. The kind
+    selector is why this is one page and not nine.
+
+    Three things this page has to make obvious, because they are what people
+    get wrong about buckets:
+
+      1. WHAT A MEMBER IS depends on the kind. For an entity it is a NAME AND
+         A TYPE - "Apple (Company)" belongs in the Apple bucket and "Apple
+         (Fruit)" does not, and the type is the only thing that tells them
+         apart. For every other kind it is a plain value out of that kind's
+         vocabulary, so there is no type field at all.
+
+      2. WHAT THE BUCKET ACTUALLY MATCHES, per language. Members are spelled
+         in one language and entity ids are shared by the translations of a
+         task, so an English member usually reaches the German rows as well -
+         "usually" is exactly why the number is on screen (from
+         /api/buckets/resolve) instead of being assumed. For a type bucket it
+         is the whole point: "Company" reaches the English rows and
+         "Unternehmen" the German ones, and only both together cover the
+         project.
+
+      3. A VALUE BELONGS TO ONE BUCKET OF ITS KIND. The suggestion list says
+         which bucket a value is already in rather than hiding it - a value
+         in two buckets would make one term resolve to two groups and only
+         one of them could win.
+
+    Connection types are deliberately absent: they are grouped on the
+    Connection colours page, and a search treats a colour group exactly as it
+    treats a bucket. The note below the kind selector says so and links there.
+
+    The card skeleton below is a <template>: buckets.js clones it per
+    bucket, so the typeahead markup stays in the file that owns the macro
+    and there is one definition of a bucket card, not two.
+-#}
+{% extends "_layout.html" %}
+{% from "_macros.html" import typeahead, search_actions %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ static('css/settings.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Buckets</h1>
+  <details class="page-about">
+    <summary>About this page</summary>
+    <div class="page-about-body">
+      <p class="page-purpose">A bucket names the values that mean the same thing to you. Searching for the bucket in any view searches every member of it, and the result is shown as one thing.</p>
+      <p>The kind says what a bucket is about: entities, entity types, document types, places, location types, event types, attribute types, units or market topics.</p>
+      <p>The name is a short label - it is what you type into a search field later.</p>
+      <p>Choosing a suggestion adds it at once, with its type where the kind has one.</p>
+      <p>A value that is already in another bucket of the same kind is shown with the name of that bucket and cannot be added twice: one value belongs to one bucket, or a search would have two answers.</p>
+      <p>Connection types are not here. They are grouped on the Connection colours page - one colour per group - and a search treats a colour group exactly as it treats a bucket.</p>
+    </div>
+  </details>
+</div>
+
+{#- WHAT IS SEARCHED, THEN HOW IT IS NARROWED, THEN THE ACTION - the same
+    order as every other toolbar in the product, every control the same
+    height, every label above its own control, and the button group carrying
+    an empty label row so it cannot float up out of line. -#}
+<form class="filter-card bucket-new" id="bucket-new" novalidate>
+  <div class="toolbar settings-toolbar">
+    <div class="field bucket-kind-field">
+      <label class="field-label" for="bucket-kind">Kind</label>
+      <select id="bucket-kind" name="kind"></select>
+    </div>
+    <div class="field">
+      <label class="field-label" for="bucket-name">New bucket</label>
+      {#- What the name is for: About disclosure, top of the page. -#}
+      <input type="text" id="bucket-name" name="name" maxlength="200"
+             placeholder="For example: Apple">
+    </div>
+    <div class="field bucket-scope">
+      <span class="field-label" id="bucket-scope-label">Applies to</span>
+      <div class="row" role="group" aria-labelledby="bucket-scope-label">
+        <label class="check"><input type="radio" name="scope" value="project" checked> This project only</label>
+        <label class="check"><input type="radio" name="scope" value="all"> Every project</label>
+      </div>
+    </div>
+    <div class="field field--action">
+      {#- A GROUP WITHOUT A LABEL STILL OCCUPIES THE LABEL ROW. Without this
+          the button loses the line above it and sits higher than everything
+          beside it. -#}
+      <span class="field-label" aria-hidden="true"></span>
+      <button type="submit" class="button">Create bucket</button>
+    </div>
+  </div>
+  <p class="query-status" id="bucket-new-status" aria-live="polite"></p>
+  <p class="field-help" id="bucket-kind-note"></p>
+</form>
+
+<div class="undo-strip" id="bucket-undo" role="status" hidden></div>
+
+<section aria-labelledby="bucket-list-title">
+  <div class="page-header">
+    <h2 id="bucket-list-title" class="card-title">Your buckets</h2>
+    <span class="card-meta" id="bucket-count"></span>
+  </div>
+
+  {#- THE SEARCH IS THE FIRST THING IN THE TOOLBAR, the same width and shape
+      as on every other view, with the same placeholder grammar and the same
+      clear control. What is searched, then how it is narrowed. -#}
+  <form class="filter-card toolbar settings-toolbar bucket-filter" id="bucket-filter" novalidate>
+    <div class="field">
+      <label class="field-label" for="bucket-search">Find a bucket</label>
+      <input type="search" id="bucket-search" placeholder="Every bucket"
+             autocomplete="off" spellcheck="false">
+    </div>
+    <div class="field bucket-kind-field">
+      <label class="field-label" for="bucket-kind-filter">Kind</label>
+      <select id="bucket-kind-filter"></select>
+    </div>
+  {#- The same row as every other query on the product: the button under the
+      fields, on the left, with "Clear" beside it as the way back. The list
+      still narrows as you type - this is for somebody who does not know
+      that, which is everybody the first time. -#}
+  {{ search_actions(clear_id="bucket-filter-clear", clear="custom") }}
+  </form>
+  {#- A SET FILTER IS STATE AND MAY NOT BE HIDDEN: this line says what is
+      being filtered out whenever the list is showing less than everything. -#}
+  <p class="query-status filter-note" id="bucket-filter-note" aria-live="polite" hidden></p>
+
+  <ul class="bucket-list list" id="bucket-list" aria-busy="false">
+    <li class="loading">Loading buckets…</li>
+  </ul>
+  <p class="empty" id="bucket-empty" hidden>No buckets yet. Create one above, then add the values that belong together.</p>
+</section>
+
+{#- Filled from /api/types/entity so the type field suggests the types this
+    archive actually has; free text stays possible, because a type the
+    extraction has not written yet is still a valid thing to prepare for. -#}
+<datalist id="entity-types"></datalist>
+
+<template id="bucket-card-template">
+  <li class="card bucket-card" data-bucket>
+    <div class="bucket-head">
+      <div class="field bucket-title">
+        <label class="field-label">Name</label>
+        <input type="text" class="bucket-rename" maxlength="200">
+      </div>
+      {#- The tags say what the bucket is about and where it applies; the
+          tick box changes the second. The KIND is not editable: its members
+          are keyed to it, so changing it would leave a bucket full of values
+          that mean nothing in the new kind, and silently. -#}
+      <div class="bucket-scope-tag">
+        <span class="tag tag--kind" data-kind-tag></span>
+        <span class="tag" data-scope-tag></span>
+        <label class="check"><input type="checkbox" data-scope-every> Every project</label>
+      </div>
+      <div class="bucket-head-actions">
+        <span class="save-note" data-save-note aria-live="polite"></span>
+        {#- Quiet and red, not a second grey button beside "Add member": the
+            word says what it does and the colour agrees with the word, which
+            is the pair WCAG asks for (colour is never the only carrier). The
+            press asks a question in the card before anything happens. -#}
+        <button type="button" class="button button--quiet button--remove" data-delete-bucket>Delete bucket</button>
+      </div>
+    </div>
+
+    <p class="bucket-matches" data-matches aria-live="polite">
+      <span class="loading">Counting…</span>
+    </p>
+
+    <div class="table-scroll">
+      <table class="table bucket-members">
+        <caption data-members-caption>Members</caption>
+        <thead>
+          <tr><th scope="col">Name</th><th scope="col" data-type-column>Type</th><th scope="col" class="num" data-count-column>Entity records</th><th scope="col"><span class="visually-hidden">Remove</span></th></tr>
+        </thead>
+        <tbody data-members></tbody>
+      </table>
+    </div>
+    <p class="empty" data-members-empty hidden>No members yet. A bucket with one member behaves like the name itself; two or more is where it earns its keep.</p>
+    <div class="undo-strip" data-member-undo role="status" hidden></div>
+
+    <form class="bucket-add toolbar settings-toolbar" data-add-member novalidate>
+      {#- NO HINT LINE: About disclosure, top of the page. The suggestion URL
+          is rewritten per kind by buckets.js, because the vocabulary a
+          member comes from IS the kind. -#}
+      {{ typeahead("member_name", label="Add an entity",
+                   suggest_url="/api/suggest/entity?fold=0",
+                   placeholder="Type a name",
+                   min_chars=0, limit=8) }}
+      <div class="field bucket-type-field" data-type-field>
+        <label class="field-label" data-type-label>Type</label>
+        <input type="text" class="member-type" list="entity-types" maxlength="200"
+               placeholder="For example: Company">
+      </div>
+      <div class="field field--action">
+        <span class="field-label" aria-hidden="true"></span>
+        <button type="submit" class="button button--secondary">Add member</button>
+      </div>
+    </form>
+    {#- Where an add that did not happen is said: beside the form it was
+        attempted in, not in the card header where the rename reports. The
+        API's answer to "Apple is already in this bucket" must not reach the
+        console and nowhere else - a card that simply does nothing reads
+        as a broken button. Outside the form, so it does not join the
+        toolbar's flex row and push the button off the end. -#}
+    <p class="field-help bucket-add-status" data-add-status aria-live="polite"></p>
+  </li>
+</template>
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="{{ static('js/buckets.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,1227 @@
+/* ==========================================================================
+ *  The Watched pages views: the overview (/sources) and the editor
+ *  (/sources/new, /sources/{id}) with its two pickers.
+ *
+ *  Loaded by templates/sources.html and source_edit.html on top of app.css,
+ *  which owns the tokens, the buttons, the cards, the tables and the
+ *  dialog frame. Nothing here restyles a shared class; everything is a new
+ *  one, so a change to app.css cannot be undone by this file.
+ *
+ *  THREE RULES THIS FILE IS BUILT ON.
+ *
+ *  1. NO `overflow` ON ANY BLOCK THAT COULD CONTAIN A TYPEAHEAD OR A
+ *     DISCLOSURE. The editor has neither today, but it grows, and the
+ *     suggestion list has silently vanished twice in this project for
+ *     exactly that reason. The only scroll box here is the picker's list,
+ *     which contains rows and nothing else.
+ *
+ *  2. EVERY ROW A FINGER HAS TO HIT IS 44 px TALL. The link picker asks
+ *     somebody to tick a hundred rows in a row; at 32 px that is a page of
+ *     misses (WCAG 2.5.8 asks for 24, the dashboard's own rule is 44 for
+ *     anything primary, and ticking is the primary act of that dialog).
+ *
+ *  3. A STATE IS NEVER A COLOUR ALONE. Every pill carries its word, every
+ *     forbidden row carries a lock glyph AND the word "not allowed", and
+ *     the tinted left edge of a card repeats what its pill already says.
+ *
+ *  4. NOTHING IS SET BELOW 16 px. Not for the addresses in the picker, the
+ *     three examples in a folded group head or the labels over every
+ *     number - which is to say for most of the text a decision is actually
+ *     made on. A label and its number are told apart by weight and colour,
+ *     never by shrinking the label (NN/g on usability for senior citizens).
+ * ========================================================================== */
+
+/* ── The overview ─────────────────────────────────────────────────────── */
+
+.sources-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem var(--gap);
+  margin-bottom: var(--gap);
+}
+.sources-top .page-header { margin-bottom: 0; }
+
+/* The two sentences about the machinery - is a crawler running, and did
+ * anything go wrong - sit together, right of the heading, because they are
+ * read once and then ignored. Both are links or pills with words in them. */
+.crawler-state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+/* .pill is in app.css - the Watchlist is not the only view with a status
+ * pill, and a component two views need does not belong to one of them. */
+
+/* "3 problems in the last 24 hours" - a link, and 44 px tall, because it is
+ * the one thing on this page somebody presses in a hurry. */
+.problems-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-h);
+  padding: 0 0.75rem;
+  border-radius: var(--radius);
+  font-weight: 600;
+}
+.problems-link[data-problems="0"] { font-weight: 500; color: var(--muted); }
+
+.sources-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  align-items: center;
+}
+
+/* The view's search box: app.css's `.toolbar` (top-aligned, one label row,
+ * and the two buttons - which have no label - given that row as a margin so
+ * they sit on the field's baseline). One row on a wide screen, wrapping to
+ * two on a narrow one; the help line is a full-width row of its own
+ * (flex-basis 100%) so it never squeezes the field it explains. */
+.sources-search { margin-bottom: var(--gap); }
+.sources-search .field { flex: 1 1 18rem; max-width: 32rem; }
+.sources-search input[type="search"] { width: 100%; }
+.sources-search .field-help { flex: 1 1 100%; margin: 0; }
+
+/* The two empty states are one block with a sentence and the way back. */
+#sources-no-match { display: grid; gap: 0.5rem; justify-items: start; }
+
+.source-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--gap);
+}
+
+.source-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem var(--gap);
+  align-items: start;
+  border-left: 6px solid var(--line-soft);
+}
+.source-item[data-enabled="true"] { border-left-color: var(--ok); }
+.source-item[data-robots="forbidden"] { border-left-color: var(--error); }
+
+.source-name {
+  margin: 0;
+  font-size: 1.125rem;
+  line-height: 1.3;
+}
+.source-name a { font-weight: 650; }
+.source-host {
+  display: block;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 1rem;
+  word-break: break-all;
+}
+
+.source-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem 0.5rem;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.source-flags li { margin: 0; }
+
+/* The counts. A definition list, so the number and what it counts are tied
+ * together for a screen reader as well as for the eye. */
+/* EQUAL TRACKS, like the four periods under a Dashboard tile: four
+ * numbers side by side, each as wide as the next, so the eye reads down a
+ * column of cards and finds "Submitted" in the same place every time. As a
+ * flex row each group was as wide as its own words, and the four columns
+ * were four different widths in every card. */
+.source-numbers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  gap: 0.25rem 1.25rem;
+  margin: 0.625rem 0 0;
+}
+.source-numbers div { min-width: 0; }
+.source-numbers dt {
+  font-size: 1rem;
+  color: var(--muted);
+}
+.source-numbers dd {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+/* THE ROW'S ONE LINE OF STATE, AND IT KEEPS ITS HEIGHT.
+ *
+ * Pressing Test on a row must not APPEND a second paragraph to the card -
+ * "one moment, fetching the page once" - or the card grows by a line under
+ * the pointer that has just clicked it, and every card below it moves down.
+ * On a list of twenty that is the whole page jumping away from the reader
+ * at the moment they are looking at the answer.
+ *
+ * So the line is the one that is already there, and it is a fixed height: one
+ * line of 16 px text at line-height 1.5. What a test says goes INTO it, in
+ * place of the last-run state, which is the honest thing anyway - the newest
+ * fact about the row is what the row should say. */
+.source-last-run {
+  margin: 0.5rem 0 0;
+  min-height: 1.5rem;
+  color: var(--muted);
+}
+.source-last-run strong { color: var(--text); }
+
+/* ONE SIZE, AND THAT IS THE WHOLE RULE. "Test" is four letters and "Open"
+ * is four, but a button sized to its label makes a column of ragged blocks
+ * down the right of every card, and the eye reads the ragged edge as a
+ * difference in importance that is not there. They are stretched to the
+ * column instead, so the right edge of the list is one line. */
+.source-side {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+  text-align: right;
+  /* Wide enough for the tick box WITH the warning mark beside its label, so
+   * the column does not go narrower than the one control in it that can grow.
+   * The buttons stretch to whatever the column ends up being, which is the
+   * rule above: one width down the right of every card. */
+  min-width: 13rem;
+}
+.source-side .button {
+  position: relative;   /* the tick below hangs off this */
+  white-space: nowrap;
+  width: 100%;
+  justify-content: center;
+}
+
+/* TESTED, IN GREY.
+ *
+ * Grey and not green on purpose: it says the page was fetched from here, which
+ * is a fact about us, not a verdict on what came back. The verdict is the pill
+ * on the left of the card, and it is the one that gets a colour.
+ *
+ * Out of the flow, like the warning on the tick box above it, so a row that
+ * carries it is exactly as tall as a row that does not. The label of the
+ * button stays centred in the whole button rather than in what is left of it;
+ * at this column width there is no room for the two to meet. */
+.test-done {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  font-size: 0.9375rem;
+  line-height: 1;
+  pointer-events: none;
+}
+/* ROOM FOR THE WARNING MARK, RESERVED HERE AND NOT IN app.css.
+ *
+ * The mark is absolutely positioned against this label (`.enable-warn`,
+ * app.css) and the room for it was reserved there too - with a
+ * `padding-right` that never applied. `.enable-check` below sets `padding` as
+ * a SHORTHAND, this file loads after app.css, and equal specificity means the
+ * last one wins: the shorthand wrote the right padding back to 0.5rem and the
+ * mark sat on the last letter of "schedule".
+ *
+ * So it is reserved here, on the row's box, past the shorthand and with a
+ * selector that outranks it. `nowrap` because the words must push the column
+ * wider rather than break in two - a two-line label makes one card taller
+ * than the rest. */
+.source-side .enable-check {
+  justify-content: flex-end;
+  /* 0.5rem to the edge + the 1.125rem mark + room between it and the last
+   * letter, so the words stop before the mark starts. */
+  padding-right: 2.25rem;
+  white-space: nowrap;
+}
+
+/* ── The crawler's own switch ─────────────────────────────────────────────
+ *
+ * One card over the whole watchlist, above the search: the search narrows
+ * what is listed, this governs what the machine does, and a control that
+ * stops every crawl does not belong in a row of filters.
+ *
+ * The sentence beside it is the point of the card. A tick box labelled "On"
+ * says what its state is and nothing about what that means; the line says
+ * whether anything is actually being fetched, which is a different fact -
+ * a switch that is on with no crawler running is a plan, not a state. */
+.crawler-switch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem var(--gap);
+  margin-bottom: var(--gap);
+  border-left: 4px solid var(--line);
+}
+.crawler-switch-main { min-width: 0; flex: 1 1 22rem; }
+.crawler-switch-said { margin: 0.25rem 0 0; color: var(--muted); }
+.crawler-switch-action { flex: 0 0 auto; }
+/* On, in the one place on this page where a colour means "the machine is
+ * doing something". Off is the resting state and takes no colour at all. */
+.crawler-switch.is-on { border-left-color: var(--accent); }
+
+/* The enable tick box. A real checkbox with a real label, not a sliding
+ * switch: a switch says nothing about which end is on, and this decision -
+ * "start crawling somebody else's site" - is not one to guess at. */
+.enable-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: var(--control-h);
+  padding: 0 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-weight: 600;
+  cursor: pointer;
+}
+.enable-check input { margin: 0; }
+.enable-check[data-busy="true"] { opacity: 0.6; cursor: progress; }
+
+/* The refusal that comes back from POST /enable, in the card, under the box
+ * it belongs to - never a toast: it carries the rule text of a robots.txt,
+ * which is the longest sentence on the page and the one worth re-reading. */
+.enable-refusal {
+  grid-column: 1 / -1;
+  margin: 0.25rem 0 0;
+}
+
+/* ── The editor ───────────────────────────────────────────────────────── */
+
+.editor-form {
+  display: grid;
+  gap: var(--gap);
+}
+
+/* One card per step, numbered, so the page reads as a sentence: where to
+ * look, what to collect, test and save. */
+.step-card { border-top: 4px solid var(--accent); }
+.step-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.625rem;
+  margin-bottom: 0.25rem;
+}
+.step-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 700;
+  font-size: 1rem;
+  flex: none;
+}
+.step-title { margin: 0; font-size: 1.125rem; }
+.step-purpose { margin: 0 0 var(--gap); color: var(--muted); }
+
+/* ── A SUBSECTION INSIDE A STEP ───────────────────────────────────────────
+ *
+ * "When and how often" asks about three unrelated things - the rhythm of the
+ * visits, how far a crawl may reach, and the site's own rules - and it asked
+ * them as one undivided run of ten controls. Ten settings in a row read as ten
+ * settings of equal weight, and the reader who only wants to slow a crawl down
+ * has to read all ten to find the three that do it.
+ *
+ * A hairline above the name is the whole device: it is the cheapest mark that
+ * says "a new subject starts here", and unlike a box it adds no second frame
+ * inside a card that already has one (app.css says the same about fieldsets).
+ * The margin above is what makes the heading belong to what FOLLOWS it rather
+ * than to what it interrupts - a heading nearer the block above it is a
+ * caption, not a heading. */
+.step-section {
+  margin: 1.75rem 0 0;
+  padding-top: 0.875rem;
+  border-top: 1px solid var(--line-soft);
+  font-size: 1.125rem;
+}
+
+.field-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem var(--gap);
+  align-items: flex-start;
+}
+.field-row > .field { flex: 1 1 16rem; min-width: 0; }
+.field-row > .field--wide { flex: 3 1 26rem; }
+
+/* A group of radios that each carry a consequence sentence. The sentence is
+ * the point: "Everything except what I reject" is a promise about a hundred
+ * links nobody has seen yet, and a person deciding needs to be told what it
+ * costs before they press it, not after the first crawl. */
+.choice-list {
+  display: grid;
+  gap: 0.5rem;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.choice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.125rem 0.625rem;
+  align-items: start;
+  min-height: var(--control-h);
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  background: var(--surface);
+  cursor: pointer;
+}
+.choice:hover { background: var(--surface-2); }
+.choice input { margin: 0.25rem 0 0; }
+.choice:has(input:checked) { border-color: var(--accent); background: var(--accent-tint); }
+.choice-label { font-weight: 600; }
+.choice-consequence {
+  grid-column: 2;
+  margin: 0;
+  color: var(--muted);
+  font-size: 1rem;
+}
+
+.switch-row {
+  display: grid;
+  gap: 0.375rem;
+  margin: var(--gap) 0 0;
+}
+
+/* PROXIMITY, THE RIGHT WAY ROUND. It was inverted here and in the robots
+ * block, and the cause was a 44 px box.
+ *
+ * `.check` in app.css is `min-height: var(--control-h)` - 44 px, so the label
+ * is a touch target even when its text is one short line. Contents aligned
+ * to the TOP of that box would leave a tick with 24 px of text in a 44 px
+ * box carrying about 20 px of empty box under it, and the note that belongs
+ * to that tick 20 + 6 px below the words it explains while the unrelated
+ * block above is 16 px away. The eye groups by distance (Gestalt proximity,
+ * and the reason every form in this product puts help under its own
+ * control): the sentence would read as an introduction to the NEXT thing.
+ *
+ * So the height is made out of padding instead of an empty box, so the
+ * 44 px target is still there - 24 px of line plus 2 x 11 px is 46 - and the
+ * space is INSIDE the target rather than under the words. Measured in
+ * tests/ui/test_sources_search.py: the gap from a tick to its own note must be
+ * smaller than the gap from the tick to the block above it.
+ *
+ * BOTH SELECTORS. The robots block was a `.choice-list` until this pass and a
+ * group of ticks may be one again; the rhythm of a tick and its sentence must
+ * not depend on which container it happens to land in. */
+.switch-row .check,
+.choice-list .check {
+  align-items: flex-start;
+  min-height: auto;
+  padding: 0.6875rem 0.5rem 0.6875rem 0;
+}
+
+/* 1.375 rem is the width app.css gives a checkbox and 0.5 rem its margin, so
+ * the note starts exactly where the label's words start. It was 1.75 rem - a
+ * guess, and half a character out, which is enough to read as a third
+ * indentation level on a form that already has two. */
+.switch-note {
+  margin: 0 0 0 1.875rem;
+  color: var(--muted);
+  font-size: 1rem;
+}
+
+/* A bubble opened from a tick box belongs to the tick above it, not to the one
+ * below. In a grid every gap is the same, so the bubble carries its own space
+ * UNDER it and none over it, and takes the note's indent so the pair reads as
+ * one block. */
+.switch-row .hint-bubble {
+  margin: 0 0 0.5rem 1.875rem;
+}
+
+/* Patterns and exact addresses, as chips with a human label and how many
+ * links of the last test the pattern explains. The regex lives behind a
+ * disclosure - it is the answer to "why did it take THAT one", not the way
+ * the rule is normally read (no regex unless opened). */
+.rules-block { margin-top: var(--gap); }
+.rules-block h3 { margin: 0 0 0.375rem; font-size: 1rem; }
+.rule-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0 0 0.5rem;
+  padding: 0;
+}
+.rule-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 36px;
+  padding: 0.125rem 0.25rem 0.125rem 0.625rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  max-width: 100%;
+}
+.rule-chip[data-kind="reject"] { background: var(--error-tint); border-color: var(--error); }
+.rule-chip[data-kind="accept"] { background: var(--ok-tint); border-color: var(--ok); }
+.rule-chip[data-review="true"] { border-style: dashed; }
+.rule-label {
+  font-family: var(--mono);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.rule-count { color: var(--muted); font-size: 1rem; white-space: nowrap; }
+.rule-remove {
+  min-width: 32px;
+  min-height: 32px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--error);
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.rule-remove:hover { background: var(--error-tint); }
+
+.rule-detail { margin: 0.25rem 0 0; }
+.rule-detail > summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  cursor: pointer;
+  color: var(--accent);
+  font-weight: 600;
+}
+.rule-detail pre {
+  margin: 0.375rem 0 0;
+  padding: 0.5rem 0.625rem;
+  background: var(--surface-2);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  font-family: var(--mono);
+  font-size: 1rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.manual-pattern { margin-top: 0.5rem; }
+.manual-pattern .toolbar { align-items: flex-end; }
+.manual-verdict { margin: 0.375rem 0 0; font-size: 1rem; }
+.manual-verdict[data-state="ok"] { color: var(--ok); font-weight: 600; }
+.manual-verdict[data-state="bad"] { color: var(--error); font-weight: 600; }
+
+/* The two picker buttons. Each one carries its own sentence under it -
+ * they are fed by two different tests, and one line for both was true of
+ * one button and false of the other. */
+.picker-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem var(--gap);
+  margin-top: 0.75rem;
+}
+.picker-button {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 1 1 18rem;
+  align-items: flex-start;
+}
+.picker-button .field-help { margin: 0; }
+
+/* ── Test and save ────────────────────────────────────────────────────── */
+
+/* Test is an outlined button on the left, Save a filled one at the right
+ * end of its own row: the two acts must never be told apart by their words
+ * alone. Nothing here crawls except the button that says Test. */
+.test-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+.button--test {
+  border: 2px solid var(--accent);
+  background: var(--surface);
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+/* The hover state repeats what the resting state says. `.button:hover` in
+ * app.css paints the label white for a filled button; an outlined one that
+ * only changes its background inherits that white on a near-white wash and
+ * disappears (measured at 1.09:1). Every hover rule in this file therefore names its colour
+ * as well as its background. */
+.button--test:hover:not(:disabled),
+.button--test:focus-visible:not(:disabled) {
+  background: var(--accent-tint);
+  color: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+
+.progress-line {
+  margin: 0.625rem 0 0;
+  min-height: 1.5rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+.progress-line[data-running="true"]::before {
+  content: "⟳";
+  display: inline-block;
+  margin-right: 0.375rem;
+  animation: sources-spin 1.2s linear infinite;
+}
+@keyframes sources-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .progress-line[data-running="true"]::before { animation: none; }
+}
+
+.verdicts { display: grid; gap: 0.5rem; margin-top: 0.75rem; }
+.verdicts:empty { display: none; }
+.verdict {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.125rem 0.625rem;
+  align-items: start;
+}
+.verdict-icon { font-size: 1.25rem; line-height: 1.3; }
+.verdict-title { margin: 0; font-weight: 700; }
+.verdict-text { grid-column: 2; margin: 0.125rem 0 0; }
+.verdict-rule {
+  grid-column: 2;
+  margin: 0.375rem 0 0;
+  padding: 0.375rem 0.5rem;
+  background: var(--white);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  font-family: var(--mono);
+  font-size: 1rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.verdict-actions { grid-column: 2; margin-top: 0.5rem; display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+.result-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.5rem;
+  margin: 0.75rem 0 0;
+}
+.result-summary div { min-width: 5rem; }
+.result-summary dt { font-size: 1rem; color: var(--muted); }
+.result-summary dd { margin: 0; font-size: 1.125rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+
+/* ── The action bar ───────────────────────────────────────────────────────
+ *
+ * Keep it, throw it away, or leave. On screen whatever step somebody is on
+ * and whatever is filled in: "how do I get out of here" must never depend on
+ * how far one got. A card of its own rather than the tail of the last step,
+ * because it is not part of step 4 - it is what one does with all four. */
+.action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+  border-top: 4px solid var(--line);
+}
+.action-bar-said { flex: 1 1 18rem; min-width: 0; }
+.action-bar-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+.action-bar .button--primary-save { min-width: 12rem; }
+.save-state { margin: 0; font-weight: 600; }
+.save-state[data-state="saved"] { color: var(--ok); }
+.save-state[data-state="failed"] { color: var(--error); }
+
+/* Leaving the editor with work in it. The question is asked in the page,
+ * at the top of the form where the eye already is, and the safe answer is
+ * the one that has focus - the same shape as the picker's discard bar, so
+ * the two questions read as one system - older readers make more mistakes
+ * and recover from them less easily. */
+
+/* ── The pickers (both dialogs) ───────────────────────────────────────── */
+
+.picker { display: flex; flex-direction: column; gap: 0.75rem; min-height: 0; }
+
+.picker-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem 0.75rem;
+}
+.picker-toolbar .field { flex: 1 1 16rem; }
+.picker-hint { margin: 0; color: var(--muted); font-size: 1rem; }
+
+/* The one sentence that explains why the title counts more links than the
+ * footer can ever tick. It is a statement about the site's rules, not a
+ * fault of the person reading it, so it is set as ordinary text with a
+ * padlock rather than as a warning box. */
+.picker-note {
+  margin: 0;
+  padding: 0.375rem 0.625rem;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  font-weight: 600;
+}
+.picker-note::before { content: "🔒 "; }
+
+/* The one scroll box in this file. It carries rows and nothing that opens.
+ *
+ * Its height is measured off the window rather than off the dialog: the
+ * dialog is `height: calc(100vh - 2rem)` (app.css) and its body scrolls, so
+ * a box with a fixed max-height left a strip of empty dialog under the list
+ * on a tall window AND a second scrollbar on a short one. 22rem is what the
+ * header, the toolbar, the hint line and the footer take. */
+.picker-scroll {
+  overflow-y: auto;
+  min-height: 12rem;
+  max-height: calc(100vh - 22rem);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.picker-groups { list-style: none; margin: 0; padding: 0; }
+.picker-group + .picker-group { border-top: 1px solid var(--line-soft); }
+
+/* The head is the unit of decision: tick, name, "n of m ticked", and three
+ * addresses underneath. The examples take the second row of the grid so
+ * that a long address wraps under the label instead of squeezing the count
+ * off the right edge on a 1024 px window. */
+/* The head selects its group when it is clicked (linkpicker.js), so it says
+ * so before the click - a row that acts like a control and does not look
+ * like one is a row nobody presses. */
+.group-head { cursor: pointer; }
+.group-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+  min-height: var(--control-h);
+  padding: 0.375rem 0.625rem;
+  background: var(--surface-2);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.group-tick {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--control-h);
+  min-height: var(--control-h);
+  cursor: pointer;
+}
+/* A group whose every link the site's rules forbid. The box was disabled
+ * and looked exactly like a working one - full opacity, a pointer cursor
+ * and "Tick every link in Paging links" spoken to a screen reader - so
+ * pressing it did nothing and read as a broken page. The words in the head
+ * carry the reason; these two lines stop the box from promising. */
+.group-tick--off { opacity: 0.45; cursor: not-allowed; }
+.group-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-height: var(--control-h);
+  padding: 0 0.5rem;
+  border: 0;
+  background: transparent;
+  color: var(--accent-strong);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.group-marker { display: inline-block; transition: transform 150ms ease; }
+.picker-group[data-open="false"] .group-marker { transform: rotate(-90deg); }
+@media (prefers-reduced-motion: reduce) { .group-marker { transition: none; } }
+.group-examples {
+  grid-column: 2 / -1;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 1rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.group-examples li { margin: 0; }
+/* Open, the head keeps its name and its count and drops the examples: the
+ * addresses are in the rows right below it, and the head is sticky - three
+ * lines of it would follow the reader down a hundred rows. */
+.picker-group[data-open="true"] .group-examples { display: none; }
+.group-examples li[data-rest] { font-family: var(--font); font-style: italic; }
+.group-count { font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+.link-rows { list-style: none; margin: 0; padding: 0; }
+/* Folded: the rows go, and so does the button that draws more of them -
+ * "Show the other 31 in this group" under a group with nothing under it
+ * is an offer about something invisible. */
+.picker-group[data-open="false"] .link-rows,
+.picker-group[data-open="false"] .picker-more { display: none; }
+
+/* THE ROW IS ONE LABEL and the label is the grid, so the whole width of it
+ * selects the link (templates/partials/link_row.html says why). The <li>
+ * keeps the stripe and the rule above it; the padding moved inside so that
+ * the clickable area is the whole row and not the row minus its margin. */
+.link-row {
+  display: block;
+  border-top: 1px solid var(--line-soft);
+}
+.link-row > .link-tick {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0 0.5rem;
+  min-height: var(--control-h);
+  padding: 0.25rem 0.625rem;
+  width: 100%;
+}
+.link-row:nth-child(odd) { background: var(--surface); }
+.link-row:nth-child(even) { background: var(--stripe); }
+.link-tick { cursor: pointer; }
+/* NO MINIMUM ON THE BOX ITSELF. It carried `min-width/min-height:
+ * var(--control-h)` from when the box was the only thing that could be
+ * pressed - which drew a 44 px checkbox, five times the size of the one in
+ * the group head above it. The whole row is the label now, so the 44 px
+ * target is the row; the box is a mark, and it is the same mark in both
+ * places. */
+.link-tick > input { justify-self: center; }
+/* ONE SIZE FOR BOTH, group head and row: two boxes of different sizes in
+ * one list read as two different kinds of control. 18 px is a little over
+ * the browser's own, which is small enough to be missed on a busy row. */
+.group-tick input, .link-tick input { width: 18px; height: 18px; }
+/* The body is a span now (it is inside the label), so it needs the
+ * block behaviour the div gave it for free. */
+.link-body { display: block; }
+.link-body { min-width: 0; padding: 0.25rem 0; }
+.link-text { font-weight: 600; overflow-wrap: anywhere; }
+.link-url {
+  display: block;
+  font-family: var(--mono);
+  font-size: 1rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.link-tags { display: inline-flex; flex-wrap: wrap; gap: 0.25rem; margin-left: 0.375rem; }
+
+/* Robots said no. Greyed, locked, and the word is there: a colour and a
+ * padlock are two carriers, and the third one is the text of the rule in
+ * the row's title and in the group's footnote. */
+.link-row[data-forbidden="true"] { background: var(--surface-2); color: var(--muted); }
+.link-row[data-forbidden="true"] .link-text { font-weight: 500; }
+.link-lock { font-weight: 700; }
+
+.picker-more {
+  display: block;
+  width: 100%;
+  min-height: var(--control-h);
+  border: 0;
+  border-top: 1px solid var(--line-soft);
+  background: var(--surface-2);
+  font: inherit;
+  font-weight: 600;
+  color: var(--accent-strong);
+  cursor: pointer;
+}
+.picker-more:hover { background: var(--accent-tint); }
+
+.picker-count { font-weight: 700; font-variant-numeric: tabular-nums; }
+.picker-empty { margin: 0; padding: var(--gap); color: var(--muted); }
+
+/* The explanation view has no list in it - three statements, what was kept
+ * and two buttons. `.dialog--wide` in app.css is `height: calc(100vh - 2rem)`
+ * because that is what a hundred rows need, and with the rows hidden that
+ * height became 500 px of white between the last sentence and the footer.
+ * This class is added by linkpicker.js while the explanation is up and taken
+ * off again by "Back to the links"; it is a new class of this file's own,
+ * so `.dialog--wide` itself keeps working everywhere else. */
+/* `fit-content`, not `auto`: a modal <dialog> is `position: fixed` with
+ * `inset: 0` in every browser's own stylesheet, and a fixed box with a top
+ * AND a bottom and `height: auto` stretches between them - which is the
+ * full window again. `fit-content` is what the browser gives a dialog
+ * before app.css names a height. */
+dialog.dialog.dialog--fit { height: fit-content; max-height: calc(100vh - 2rem); }
+
+/* What learning answered, in the dialog, before anything is applied. The
+ * explanation is one statement per line: the server writes it as one
+ * sentence with semicolons in it, and four facts in one line is a line
+ * nobody finishes reading. */
+.learn-result { display: grid; gap: 0.625rem; }
+.learn-explanation { margin: 0; padding: 0; list-style: none; font-size: 1rem; }
+.learn-explanation li { margin: 0 0 0.25rem; }
+/* The conflict is a stack, not a row. `.notice` is a flex row (app.css),
+ * so its question, its sentence, the addresses and the two answers were
+ * laid side by side and read as one run-on line. */
+.learn-conflict {
+  margin: 0;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.375rem;
+}
+.learn-question { margin: 0; font-weight: 700; }
+/* The addresses the conflict is about. Its own class rather than the
+ * shared .list: those rows are 44 px tall with a rule between them, which
+ * is right for a page of results and far too much for five addresses
+ * inside a warning. */
+.learn-negatives {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--mono);
+  font-size: 1rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+/* The conflict is a question, so it has the two answers next to it. The
+ * one that is already in force is marked in words, not by colour. */
+.learn-answers { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
+.learn-answers .button[aria-pressed="true"]::after { content: " ✓"; }
+.learn-answered { margin: 0.375rem 0 0; font-weight: 600; }
+
+/* The question that a close would throw the work away is a DIALOG of its
+ * own now (static/js/linkpicker.js: confirmDiscard says why), so it needs
+ * no styling here - it wears the dialog shell like every other one. */
+
+/* ── The files picker ─────────────────────────────────────────────────── */
+
+/* Two columns that are two different ideas: on the left the types this
+ * source sends (a standing rule), on the right the single files found in
+ * the sample (exceptions to it). They are titled as such, separated by a
+ * line, and the right column says out loud that it is exceptions only. */
+.file-columns {
+  display: grid;
+  grid-template-columns: minmax(14rem, 22rem) minmax(0, 1fr);
+  gap: var(--gap);
+  align-items: start;
+}
+@media (max-width: 60rem) {
+  .file-columns { grid-template-columns: minmax(0, 1fr); }
+}
+.file-column h3 { margin: 0 0 0.25rem; font-size: 1rem; }
+.file-column-note { margin: 0 0 0.625rem; color: var(--muted); font-size: 1rem; }
+.file-column--rules { border-right: 1px solid var(--line-soft); padding-right: var(--gap); }
+@media (max-width: 60rem) {
+  .file-column--rules { border-right: 0; border-bottom: 1px solid var(--line-soft); padding-right: 0; padding-bottom: var(--gap); }
+}
+
+.type-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.375rem; }
+.type-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  min-height: var(--control-h);
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+}
+.type-row:has(input:checked) { border-color: var(--ok); background: var(--ok-tint); }
+.type-tick { display: inline-flex; align-items: center; gap: 0.5rem; min-height: var(--control-h); cursor: pointer; }
+.type-name { font-weight: 650; text-transform: uppercase; font-size: 1rem; letter-spacing: 0.02em; }
+.type-count { color: var(--muted); font-size: 1rem; white-space: nowrap; }
+.type-limit { grid-column: 1 / -1; display: flex; align-items: center; gap: 0.5rem; }
+.type-limit input { width: 5rem; }
+.type-limit label { font-size: 1rem; color: var(--muted); }
+
+.file-rows { list-style: none; margin: 0; padding: 0; }
+.file-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0 0.5rem;
+  min-height: var(--control-h);
+  padding: 0.25rem 0.5rem;
+  border-bottom: 1px solid var(--line-soft);
+}
+.file-row[data-sendable="false"] { background: var(--surface-2); color: var(--muted); }
+.file-name { font-family: var(--mono); font-size: 1rem; overflow-wrap: anywhere; }
+.file-from { display: block; font-size: 1rem; color: var(--muted); overflow-wrap: anywhere; }
+.file-reason { display: block; font-size: 1rem; }
+.file-size { font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 1rem; }
+
+/* ── The four steps, folded and unfolded ──────────────────────────────────
+ *
+ * A step that cannot be taken yet is folded and says why. A step that HAS
+ * been taken stays open - the page is the record of what was decided, and
+ * folding that away under somebody hides the answer they came back to check.
+ *
+ * The head is the toggle, and it is a button so that the keyboard, the
+ * screen reader and the pointer all reach it the same way. The number stays
+ * outside the button: it is decoration, and a screen reader already knows
+ * this is heading 2 of 4. */
+.step-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  /* The whole head is the target, and a heading's own height is about 22px -
+     half of what a finger needs. The padding is what makes the row hittable
+     rather than the words. */
+  min-height: var(--control-h);
+  padding: 0.25rem 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.step-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+.step-name { flex: 1 1 auto; }
+
+/* Done, in a word. Not a tick on its own: a green mark says "good" and this
+ * says "answered", which is a different claim - step 4 is never marked
+ * because its defaults are already an answer. */
+.step-state {
+  flex: none;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--ok);
+  border: 1px solid var(--ok);
+  background: var(--ok-tint);
+  border-radius: 999px;
+  padding: 0.05rem 0.5rem;
+}
+
+.step-chevron {
+  flex: none;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(45deg);
+  transition: transform 120ms ease;
+}
+.step-card[data-open="0"] .step-chevron { transform: rotate(-45deg); }
+
+/* A folded step that is not ready is quieter than one that is: the reader
+ * should be able to see, without reading a word, which cards are waiting for
+ * them and which are waiting for something else. */
+.step-card[data-ready="0"] { border-top-color: var(--line); }
+.step-card[data-ready="0"] .step-number {
+  background: var(--surface-2);
+  color: var(--muted);
+  border: 1px solid var(--line);
+}
+.step-locked {
+  margin: 0.25rem 0 0 2.375rem;
+  color: var(--muted);
+  font-size: 1rem;
+}
+.step-card[data-open="0"] { padding-bottom: 0.75rem; }
+
+/* ── The projects a page collects into ────────────────────────────────────
+ *
+ * A list rather than a select: there may be several, each with its own key,
+ * and a multi-select box hides both facts behind a control nobody can read
+ * at a glance. */
+.project-block { margin: var(--gap) 0; }
+.project-list {
+  list-style: none;
+  margin: 0.35rem 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.project-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+.project-name { font-weight: 600; flex: 1 1 12rem; min-width: 0; }
+/* A project the crawler has no key for. It stays on screen, struck
+ * through rather than removed: a page that quietly stopped collecting into
+ * somewhere is exactly what this list exists to show. */
+.project-name--gone { text-decoration: line-through; color: var(--error); }
+.project-key { flex: 2 1 18rem; min-width: 0; }
+.project-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.5rem 0 0.35rem;
+}
+
+/* The chooser dialog: every project, a tick, and the key for the ticked ones. */
+.project-chooser { display: flex; flex-direction: column; gap: 0.75rem; }
+.chooser-row {
+  display: grid;
+  gap: 0.15rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--line-soft);
+}
+.chooser-name { font-weight: 600; }
+.chooser-why { margin: 0; color: var(--muted); font-size: 1rem; }
+.chooser-key { margin-top: 0.25rem; }
+.chooser-key select { width: 100%; }
+/* What the ticks cost, under them, before Use these projects is pressed. */
+.chooser-cost {
+  margin: 0;
+  font-weight: 600;
+}
+
+/* ── The button the whole step rests on ───────────────────────────────────
+ *
+ * "Choose the links" is not a secondary button at the bottom of the card,
+ * under a block of rules and beside a second button about files - which is
+ * where a reader looks last, for the thing they have to do first. It is
+ * the first thing in the step, filled, and as wide as the card. */
+.picker-lead { margin-bottom: var(--gap); }
+.button--primary-pick {
+  width: 100%;
+  justify-content: center;
+  font-size: 1.05rem;
+  font-weight: 700;
+  min-height: 3rem;
+}
+.picker-lead .field-help { margin: 0.35rem 0 0; }
+
+/* Quieter than the save button, louder than a link: for a button that opens
+ * a decision rather than making one. */
+.button--primary-quiet {
+  border: 2px solid var(--accent);
+  background: var(--surface);
+  color: var(--accent-strong);
+  font-weight: 650;
+}
+
+/* ── One real document ────────────────────────────────────────────────────
+ *
+ * Not a step: it is what one does with a configuration that is finished. It
+ * really crawls, really submits and really costs, so it is a card of its own
+ * with the price in the sentence above the button. */
+.real-run { border-top: 4px solid var(--warn); }
+.real-documents {
+  list-style: none;
+  margin: var(--gap) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.real-document {
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+.real-document-uri {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+.real-document-said { margin: 0.25rem 0 0; display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.real-document-error { margin: 0.25rem 0 0; color: var(--error); }
+.pill[data-state="archived"] { background: var(--ok-tint); border-color: var(--ok); color: var(--ok); }
+.pill[data-state="SENT"], .pill[data-state="SENDING"] { background: var(--warn-tint); border-color: var(--warn); color: var(--warn); }
+.pill[data-state="FAILED"], .pill[data-state="GONE"] { background: var(--error-tint); border-color: var(--error); color: var(--error); }
+
+/* ── Print ────────────────────────────────────────────────────────────── */
+/* The editor prints its patterns and its verdicts - that is the page a
+ * customer files with "we asked, they allowed it". The pickers are dialogs
+ * and print.css already drops them. */
+@media print {
+  .test-row, .action-bar, .sources-actions, .sources-search, .rule-remove,
+  .picker-more, .enable-check, .manual-pattern, .picker-buttons, .picker-lead,
+  .project-actions, .real-run, .step-chevron { display: none !important; }
+  /* A printed configuration shows every step, whatever was folded on screen:
+     the paper is the record, and a folded card would print as a heading with
+     nothing under it. */
+  .step-body[hidden] { display: block !important; }
+  .step-locked { display: none !important; }
+  .rule-detail[open] pre, .verdict-rule { border: 1px solid #bbb; }
+  .rule-detail > summary { color: #000; }
+  .source-item, .step-card { break-inside: avoid; }
+}
+
+/* ── The Projects page ────────────────────────────────────────────────────
+ *
+ * The keys of a project, under the project. A list rather than a table: three
+ * of the four columns are empty for an ordinary key - only a project-read key
+ * can tell us what a key is set to run with - and a table of mostly empty cells
+ * reads as data that failed to load.
+ */
+.key-list {
+  list-style: none;
+  margin: 0.35rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.key-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.key-row .key-name { color: var(--text); }
+.key-row .key-prefix { font-size: 0.78rem; }
+.key-row .key-effort::before,
+.key-row .key-translations::before { content: "- "; }
+
+.source-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.6rem 0 0;
+}
+
+/* The key on one link group. Its own line under the rule rather than beside the
+ * label: the label is the thing being read, and a select next to it would push
+ * a long shape off the right edge on a 1024 px screen - which is where the
+ * remove button is. */
+.rule-key {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+}
+
+.rule-key-label {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.rule-key-select {
+  font-size: 0.78rem;
+  padding: 0.1rem 0.25rem;
+  max-width: 22rem;
+}
+
+/* ── The way back to the Watchlist ────────────────────────────────────────
+ *
+ * Left-aligned at both ends of the editor, so the two are the same control in
+ * the same place rather than two different offers. The top one sits under the
+ * page header and above the error notice: a message about this page belongs
+ * closer to the page than the way off it.
+ */
+.editor-back { margin: 0.75rem 0; }
+.editor-back--bottom { margin: 1rem 0 2rem; }
+
+/* On paper it is furniture: a sheet nobody can click has no way back. */
+@media print {
+  .editor-back { display: none !important; }
+}

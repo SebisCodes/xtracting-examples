@@ -1,0 +1,186 @@
+{#- The landing view: what arrived, how much, and what the newest events say.
+
+    Three blocks, in the order a person reads them (NN/g: few blocks above
+    the fold, and the most preattentive one first): how much of what arrived
+    matters and to whom, then how much arrived, then what arrived last and
+    the newest events.
+
+    THE IMPORTANCES COME FIRST because they are the only block on this page
+    that is about the READER. "1,204 sources" is the size of the archive;
+    "how many of those the Compliance perspective called critical" is the
+    reason somebody opened the dashboard this morning. The counters answer
+    "is the collector running", which is the second question and is one
+    glance further down. Each block is filled by one
+    endpoint under /api/dashboard/ (routers/api_dashboard.py):
+
+      GET /api/dashboard/stats          {tables:[{id,label,tab,hour,day,week,month,year}]}
+      GET /api/dashboard/activities     {items:[{table,label,name,derived,detail,about,date_commissioned,link}]}
+      GET /api/dashboard/latest-events  {events:[{id,type,name,description,date,source:{name,uri,domain,title,derived},entities:[{id,name,type}]}]}
+
+    `name` for a document, and `source.name` under an event, are what the
+    row is CALLED - never `sources.text_name`, which is `src_1127664` or an
+    md5 in every row this archive holds. app/source_names.py builds it from
+    the domain and the address's own slug and says so with `derived`, and
+    dashboard.js puts one line under a list that has any.
+
+    THERE IS NO SEARCH BOX HERE. This page is the overview of everything;
+    a term would have to mean "everything about X", and that is what the
+    Diagrams, Events and Query views are for. A box here would do nothing.
+
+    Everything else lives in static/js/dashboard.js: the markup below is
+    what a person sees before the first answer arrives, which is why each
+    block already carries its heading and a loading line.
+-#}
+{% extends "_layout.html" %}
+{% from "_macros.html" import icon %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ static('css/views.css') }}">
+{#- The two importance charts open the drilldown the Diagrams charts open,
+    from the same module, so they need the same sheet. -#}
+<link rel="stylesheet" href="{{ static('css/drilldown.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Dashboard</h1>
+  <details class="page-about">
+    <summary>About this page</summary>
+    <div class="page-about-body">
+      <p class="page-purpose">What arrived in the archive for <strong>{{ ctx.project or 'this project' }}</strong> ({{ ctx.language or '-' }}): counts per period, the latest activity, and the newest events.</p>
+      <p>Each tile counts one kind of row for the last year, with the last hour, day, week and month drawn underneath it. A tile opens the diagrams for what it counts.</p>
+    </div>
+  </details>
+</div>
+
+{#- ── IMPORTANCES BY PERSPECTIVE ─────────────────────────────────────────
+
+    The one table in the archive that is about the READER rather than about
+    the world: how much a document matters, asked once per perspective a
+    customer watches. One bar per perspective, stacked by importance level -
+    the height says how much was judged for that reader, the stack says how
+    much of it mattered. Two periods, because they answer two questions: the
+    last 24 hours is what the collector has just done, the last 7 days is
+    whether that is a run or a week.
+
+    Side by side in the same grid the two lists below use, so the page keeps
+    one rhythm. -#}
+<div class="grid grid--two">
+  <section class="card" aria-labelledby="imp-day-title" data-importances="24h">
+    <div class="card-header">
+      <h2 id="imp-day-title" class="card-title">Importances by perspective, last 24 hours</h2>
+      <span class="card-meta" data-imp-meta></span>
+    </div>
+    <p class="chart-purpose" data-imp-purpose></p>
+    <div class="chart-canvas dash-chart"><canvas data-imp-canvas></canvas></div>
+    {#- NOTHING TO DRAW, in the plot's own place and centred, with the glyph
+        for "nothing here" - the same block every Diagrams card uses
+        (app.css: .chart-empty). -#}
+    <div class="chart-empty" data-imp-empty hidden>
+      {{ icon("empty") }}
+      <p data-imp-empty-text></p>
+    </div>
+    <p class="chart-status" data-imp-status></p>
+    {#- THE NUMBERS BEHIND THE PICTURE, AND THE KEYBOARD'S WAY INTO IT.
+        A bar opens the rows behind it on a click; a canvas has no elements
+        to tab to, so every number here is a button that opens the same
+        dialog. Folded away, so it costs no height until somebody wants it -
+        the same answer the Diagrams cards give. Hidden entirely while there
+        is nothing to count: a fold that opens on an empty table is a
+        promise the card cannot keep. -#}
+    <details class="chart-table" data-imp-fold>
+      <summary>Numbers behind this chart</summary>
+      <div data-imp-numbers></div>
+    </details>
+  </section>
+
+  <section class="card" aria-labelledby="imp-week-title" data-importances="7d">
+    <div class="card-header">
+      <h2 id="imp-week-title" class="card-title">Importances by perspective, last 7 days</h2>
+      <span class="card-meta" data-imp-meta></span>
+    </div>
+    <p class="chart-purpose" data-imp-purpose></p>
+    <div class="chart-canvas dash-chart"><canvas data-imp-canvas></canvas></div>
+    {#- NOTHING TO DRAW, in the plot's own place and centred, with the glyph
+        for "nothing here" - the same block every Diagrams card uses
+        (app.css: .chart-empty). -#}
+    <div class="chart-empty" data-imp-empty hidden>
+      {{ icon("empty") }}
+      <p data-imp-empty-text></p>
+    </div>
+    <p class="chart-status" data-imp-status></p>
+    {#- THE NUMBERS BEHIND THE PICTURE, AND THE KEYBOARD'S WAY INTO IT.
+        A bar opens the rows behind it on a click; a canvas has no elements
+        to tab to, so every number here is a button that opens the same
+        dialog. Folded away, so it costs no height until somebody wants it -
+        the same answer the Diagrams cards give. Hidden entirely while there
+        is nothing to count: a fold that opens on an empty table is a
+        promise the card cannot keep. -#}
+    <details class="chart-table" data-imp-fold>
+      <summary>Numbers behind this chart</summary>
+      <div data-imp-numbers></div>
+    </details>
+  </section>
+</div>
+
+{#- THE HEADING NAMES THE PERIODS ONCE. Listing all five - "Archived in the
+    last hour, day, week, month and year" - above eight tiles that each list
+    the same five again underneath says it nine times. Four words are enough
+    over a grid that spells the periods out in its own labels. -#}
+<section aria-labelledby="stats-title">
+  <div class="card-header">
+    <h2 id="stats-title" class="card-title">Archived, per period</h2>
+    <span class="card-meta" id="stats-meta"></span>
+  </div>
+  <div class="grid grid--tiles" id="stats" aria-live="polite" aria-busy="true">
+    <p class="loading" id="stats-loading">Loading counts…</p>
+  </div>
+</section>
+
+<div class="grid grid--two">
+  <section class="card" aria-labelledby="activities-title">
+    <div class="card-header">
+      <h2 id="activities-title" class="card-title">Latest activity</h2>
+      {#- The dates in this list are the commissioning dates, which is what
+          "newest" means here; the words that said so twice are in the page's
+          About disclosure now. -#}
+      <span class="card-meta">Newest first</span>
+    </div>
+    <ul class="list" id="activities" aria-live="polite" aria-busy="true">
+      <li class="loading">Loading activity…</li>
+    </ul>
+  </section>
+
+  <section class="card" aria-labelledby="events-title">
+    <div class="card-header">
+      <h2 id="events-title" class="card-title">Latest events</h2>
+      <a class="card-meta" id="all-events-link" href="/events">All events</a>
+    </div>
+    {#- The order is the order of ARRIVAL, like the activity card next to it,
+        but the date on each row is the event's own - so the dates do not run
+        downwards and the caption has to say why. /events is the view that
+        sorts by the event date. -#}
+    {#- The one sentence that stops a misreading stays, at half its length:
+        the dates in this list do NOT run downwards, and a reader who is not
+        told that reads the list as broken. -#}
+    <p class="card-note">Newest in the archive first, so the dates do not run in order.</p>
+    <ul class="list" id="latest-events" aria-live="polite" aria-busy="true">
+      <li class="loading">Loading events…</li>
+    </ul>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{#- No ?v= on this import chain: layout.js pulls in "./api.js" and
+    "./state.js" without one, and a module is instantiated once PER URL. A
+    versioned URL here would give this page a second copy of state.js - two
+    `state` objects that agree only by accident. The page module itself may
+    carry the version: a relative import inside it drops the query string,
+    so "./api.js" is still the one URL layout.js already loaded. -#}
+{#- Chart.js, for the two importance charts. Vendored and deferred, as on
+    the Diagrams page: the landing view draws two small pictures and does not
+    need the library before the counters are on screen. -#}
+<script defer src="{{ static('vendor/chart.js/chart.umd.js') }}"></script>
+<script type="module" src="{{ static('js/dashboard.js') }}"></script>
+{% endblock %}

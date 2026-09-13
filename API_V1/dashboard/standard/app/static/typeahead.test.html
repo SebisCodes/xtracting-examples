@@ -1,0 +1,134 @@
+<!doctype html>
+<!--
+  Standalone page for the typeahead UI test (tests/ui/test_typeahead_keyboard.py).
+
+  It loads the real component and stylesheet with STATIC options and with a
+  STUBBED fetch, so the keyboard contract can be tested without an archive
+  and without any router. Served at /static/typeahead.test.html by the app,
+  or from app/ by a plain http.server when the app cannot start.
+
+  Nothing on this page is used by the dashboard itself.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Typeahead test page</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="css/typeahead.css">
+  <style>
+    body { font: 16px/1.4 system-ui, sans-serif; margin: 2rem; color: #1a1a1a; background: #fafafa; }
+    form { margin-bottom: 2rem; }
+    .field-label { display: block; font-weight: 600; margin-bottom: .25rem; }
+    /* A panel WITH overflow, on purpose: the third field sits in it so the
+       test can prove the list is clipped there - the pitfall, documented. */
+    .clipped { border: 1px dashed #c00; padding: 1rem; height: 90px; overflow: hidden; }
+    #log { background: #eee; padding: .5rem; min-height: 4rem; white-space: pre-wrap; }
+    button { min-height: 44px; font: inherit; }
+  </style>
+</head>
+<body>
+  <h1>Typeahead test page</h1>
+
+  <form id="static-form">
+    <div class="typeahead field">
+      <label class="field-label" for="ta-fruit">Fruit (static options, reset row)</label>
+      <input type="hidden" name="fruit" value="">
+      <input type="text" id="ta-fruit" class="typeahead-input" autocomplete="off"
+             data-typeahead data-target="fruit" data-submit="false"
+             data-empty-label="- all -" data-placeholder="Any fruit" placeholder="Any fruit"
+             data-options='["Apple", ["banana", "Banana"], {"value": "cherry", "label": "Cherry", "hint": "Stone fruit", "count": 12},
+                            {"value": "date", "label": "Date", "extra": "palm"}, "Zürich Plum"]'>
+    </div>
+    <button type="submit">Search</button>
+  </form>
+
+  <form id="server-form">
+    <div class="typeahead field">
+      <label class="field-label" for="ta-entity">Entity (server suggestions, stubbed fetch)</label>
+      <input type="hidden" name="entity" value="Apple Inc.">
+      <input type="text" id="ta-entity" class="typeahead-input" autocomplete="off"
+             data-typeahead data-target="entity" data-submit="false"
+             data-suggest="/api/suggest/entity" data-min="0" data-limit="10"
+             placeholder="Apple Inc." data-placeholder="Any entity"
+             aria-describedby="ta-entity-help">
+      <small class="typeahead-help" id="ta-entity-help">name - type</small>
+    </div>
+    <button type="submit">Search</button>
+  </form>
+
+  <form id="submit-form">
+    <div class="typeahead field">
+      <label class="field-label" for="ta-filter">Filter (choosing submits the form)</label>
+      <input type="hidden" name="days" value="7">
+      <input type="text" id="ta-filter" class="typeahead-input" autocomplete="off"
+             data-typeahead data-target="days" data-submit="true"
+             data-options='[["1", "Last day"], ["7", "Last 7 days"], ["30", "Last 30 days"]]'
+             placeholder="Last 7 days" data-placeholder="Any period">
+    </div>
+    <button type="submit">Apply</button>
+  </form>
+
+  <div class="clipped">
+    <div class="typeahead field">
+      <label class="field-label" for="ta-clipped">Clipped by an ancestor with overflow (the pitfall)</label>
+      <input type="hidden" name="clipped" value="">
+      <input type="text" id="ta-clipped" class="typeahead-input" autocomplete="off"
+             data-typeahead data-target="clipped" data-submit="false"
+             data-options='["One", "Two", "Three"]' placeholder="Anything">
+    </div>
+  </div>
+
+  <h2>Event log</h2>
+  <pre id="log" aria-live="off"></pre>
+
+  <script>
+    // The stubbed suggestion endpoint: filters a fixed list after a short
+    // delay and honours AbortController, so debounce and abort are testable.
+    window.__fetchCalls = [];
+    window.__events = [];
+    window.__submits = [];
+    const ENTITIES = [
+      { value: "Apple Inc.", label: "Apple Inc.", hint: "Company", count: 42 },
+      { value: "Apple", label: "Apple", hint: "Company", count: 7 },
+      { value: "Apple", label: "Apple", hint: "Fruit", count: 3 },
+      { value: "Microsoft", label: "Microsoft", hint: "Company", count: 31 },
+      { value: "Foxconn", label: "Foxconn", hint: "Company", count: 5 },
+      { value: "Tim Cook", label: "Tim Cook", hint: "Person", count: 9 },
+      { value: "European Commission", label: "European Commission", hint: "Regulator", count: 4 },
+      { value: "Zurich Insurance", label: "Zurich Insurance", hint: "Company", count: 2 },
+    ];
+    const realFetch = window.fetch;
+    window.fetch = function (url, init) {
+      const u = new URL(String(url), window.location.href);
+      if (!u.pathname.startsWith("/api/suggest/")) return realFetch(url, init);
+      const q = (u.searchParams.get("q") || "").toLowerCase();
+      const limit = parseInt(u.searchParams.get("limit") || "12", 10);
+      window.__fetchCalls.push(u.pathname + u.search);
+      return new Promise((resolve, reject) => {
+        const signal = init && init.signal;
+        const t = setTimeout(() => {
+          const items = ENTITIES.filter((e) => e.label.toLowerCase().includes(q)).slice(0, limit);
+          resolve(new Response(JSON.stringify({ items }), { status: 200, headers: { "Content-Type": "application/json" } }));
+        }, 40);
+        if (signal) signal.addEventListener("abort", () => { clearTimeout(t); reject(new DOMException("aborted", "AbortError")); });
+      });
+    };
+
+    const log = document.getElementById("log");
+    function line(text) { log.textContent += text + "\n"; }
+    document.addEventListener("typeahead:choose", (e) => {
+      const d = e.detail;
+      window.__events.push({ id: e.target.id, ...d });
+      line(`choose ${e.target.id} value=${JSON.stringify(d.value)} label=${JSON.stringify(d.label)} typed=${d.typed} hint=${JSON.stringify(d.hint)}`);
+    });
+    document.querySelectorAll("form").forEach((f) => f.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const data = Object.fromEntries(new FormData(f).entries());
+      window.__submits.push({ id: f.id, ...data });
+      line(`submit ${f.id} ${JSON.stringify(data)}`);
+    }));
+  </script>
+  <script type="module" src="js/typeahead.js"></script>
+</body>
+</html>

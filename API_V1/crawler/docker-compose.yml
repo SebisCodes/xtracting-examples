@@ -1,0 +1,96 @@
+# The crawler, on its own.
+#
+#   cp .env.example .env      # put your API keys in it
+#   docker compose up -d
+#
+# Expects the archive database to be running first, with database/init/03-scraper.sql
+# applied - it joins that database's network by name, which is why the folders
+# can be separate Compose projects and still find each other.
+#
+# The sources it crawls are configured in the dashboard, not here. This
+# container reads scraper_config.* and writes crawler.*; it has no port and no
+# interface of its own.
+
+name: ${ARCHIVE_STACK:-xtracting}-crawler
+
+services:
+  crawler:
+    build:
+      # The API_V1 folder, so that crawlkit/ goes into the image beside
+      # crawler/. Building from this folder cannot work - see Dockerfile.
+      context: ..
+      dockerfile: crawler/Dockerfile
+      # Named, not given a default: Compose passes it through only when it is
+      # set (environment or .env), so the Dockerfile's ARG stays the ONE place
+      # the base image tag is written. Repeating the tag here would repeat the
+      # version that has to match crawlkit's playwright pin, in a file nobody
+      # thinks of when raising it.
+      #
+      #     CRAWLER_BASE=docker.io/python:3.12-slim docker compose build
+      #
+      # builds a crawler without a browser; sources set to Rendered then fail
+      # with a sentence saying exactly that.
+      args:
+        - CRAWLER_BASE
+    restart: unless-stopped
+    # PID 1 has to reap the browser's child processes. Without this a rendered
+    # crawl leaves a zombie per run, and the container is full after a day.
+    init: true
+    # Chromium needs more than the default 64 MB of shared memory; below this
+    # it crashes on pages with many images.
+    shm_size: 1gb
+    # Long enough for the source in flight to finish and give its lease back.
+    # A killed worker leaves a lease that the next start has to wait out.
+    stop_grace_period: 45s
+    environment:
+      # Passed as parts, not as one interpolated URL. Nested ${...} defaults are
+      # not portable across Compose implementations, and a password containing
+      # @ or / would break a hand-built URL anyway. Set DATABASE_URL instead to
+      # point at a database somewhere else.
+      DATABASE_URL: "${DATABASE_URL:-}"
+      POSTGRES_USER: "${POSTGRES_USER:-xtracting}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-}"
+      POSTGRES_DB: "${POSTGRES_DB:-xtracting_archive}"
+      POSTGRES_HOST: "${POSTGRES_HOST:-xtracting_db}"
+      POSTGRES_PORT: "${POSTGRES_PORT:-5432}"
+      SCRAPER_DB_USER: "${SCRAPER_DB_USER:-}"
+      SCRAPER_DB_PASSWORD: "${SCRAPER_DB_PASSWORD:-}"
+
+      XTRACTING_API_URL: "${XTRACTING_API_URL:-https://api.xtracting.io}"
+      XTRACTING_API_KEYS: "${XTRACTING_API_KEYS:?set XTRACTING_API_KEYS in .env}"
+      # Optional, and only for keeping the .env tidy: keys meant for reading a
+      # project rather than submitting to it. Every key in both variables is
+      # probed the same way, so a key in the "wrong" one still works.
+      XTRACTING_PROJECT_KEYS: "${XTRACTING_PROJECT_KEYS:-}"
+
+      CRAWLER_USER_AGENT: "${CRAWLER_USER_AGENT:-}"
+      CRAWLER_CONCURRENCY: "${CRAWLER_CONCURRENCY:-2}"
+      CRAWLER_TICK_SECONDS: "${CRAWLER_TICK_SECONDS:-5}"
+      CRAWLER_LEASE_MINUTES: "${CRAWLER_LEASE_MINUTES:-30}"
+      CRAWLER_FILE_MAX_MB: "${CRAWLER_FILE_MAX_MB:-25}"
+      CRAWLER_SUBMIT_INTERVAL_SECONDS: "${CRAWLER_SUBMIT_INTERVAL_SECONDS:-60}"
+      CRAWLER_MAX_BATCH_TASKS: "${CRAWLER_MAX_BATCH_TASKS:-1000}"
+      CRAWLER_MAX_REQUEST_BYTES: "${CRAWLER_MAX_REQUEST_BYTES:-4500000}"
+      CRAWLER_MAX_CONTENT_CHARS: "${CRAWLER_MAX_CONTENT_CHARS:-2000000}"
+      CRAWLER_RECONCILE_MINUTES: "${CRAWLER_RECONCILE_MINUTES:-15}"
+      CRAWLER_KEY_REFRESH_SECONDS: "${CRAWLER_KEY_REFRESH_SECONDS:-300}"
+      CRAWLER_TEST_TIMEOUT_SECONDS: "${CRAWLER_TEST_TIMEOUT_SECONDS:-120}"
+      CRAWLER_ONLY_TESTS: "${CRAWLER_ONLY_TESTS:-false}"
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+    # So POSTGRES_HOST=host.docker.internal reaches a database running on this
+    # machine but outside a container. Docker Desktop provides that name on its
+    # own; Docker Engine on Linux does not, and without this line it simply does
+    # not resolve. Podman answers to host.containers.internal natively and
+    # accepts this too.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - archive
+
+networks:
+  archive:
+    # Created by ../database. Start that first, or this will not come up.
+    # ARCHIVE_STACK must match the value in ../database/.env, or this joins a
+    # network the database is not on.
+    name: ${ARCHIVE_STACK:-xtracting}-archive
+    external: true

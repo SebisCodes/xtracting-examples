@@ -1,0 +1,245 @@
+/* ==========================================================================
+ *  Typeahead - the field with the suggestion list.
+ *
+ *  THE LIST IS ABSOLUTELY POSITIONED. It lies OVER the content, not next
+ *  to it: it is a dropdown and must not push the form apart, or half the
+ *  page jumps while one types.
+ *
+ *  THAT MEANS: NO `overflow` ON ANY ANCESTOR of `.typeahead`. An
+ *  `overflow: hidden` on a label, an `overflow-y: auto` on a filter
+ *  column, an `overflow: clip` on a card - each one cuts the list off. In
+ *  the HTML everything is there; on screen nothing is. The list has
+ *  vanished exactly that way twice, and both times it looked as if the
+ *  field itself were missing. Whoever needs an overflow rule puts it on an
+ *  ancestor that does not contain the list - never on the panel or the
+ *  toolbar that holds the field.
+ *
+ *  Second trap: STACKING. The list needs to lie over whatever is below the
+ *  field (a table, a chart, the map). `z-index` only competes within one
+ *  stacking context, so a toolbar with `position: relative; z-index: 1`
+ *  and a chart card below it with `z-index: 2` hides the list. Give the
+ *  toolbar the higher stacking context, or none at all.
+ *
+ *  Sizes follow app.css: 16 px text, 44 px tall rows so the options are
+ *  real targets (WCAG 2.5.8), a 3 px focus ring.
+ * ========================================================================== */
+
+.typeahead {
+  position: relative;
+  display: inline-block;
+  min-width: 14rem;
+  max-width: 100%;
+}
+
+.typeahead input[type="text"],
+.typeahead-input {
+  width: 100%;
+  min-height: 44px;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 1rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--line, #8a8a8a);
+  border-radius: var(--radius, 6px);
+  background: var(--white, #fff);
+  color: var(--text, #1a1a1a);
+}
+
+/* A field with a set value must be visible as such without reading the
+ * placeholder - otherwise nobody knows why the list is short. */
+.typeahead.is-set input[type="text"] {
+  border-color: var(--accent, #1d4f91);
+  background: var(--accent-tint, #f2f6fb);
+}
+
+/* TWO GREYS, AND THE DIFFERENCE IS THE POINT.
+ *
+ * This field draws its SET VALUE as the placeholder (the pattern at the top
+ * of this file), so the same property has to say two opposite things:
+ * "nothing here yet" and "this is what you picked". Empty is the light grey
+ * every placeholder on the product uses; set is the body text colour, and
+ * the field is also tinted and outlined in the accent (above). Nobody has
+ * to read the words to tell which of the two they are looking at. */
+.typeahead input::placeholder {
+  color: var(--placeholder, #767676);
+  opacity: 1;
+}
+.typeahead.is-set input::placeholder {
+  color: var(--text, #1a1a1a);
+}
+
+.typeahead input:focus-visible {
+  outline: 3px solid var(--focus, #1d4f91);
+  outline-offset: 2px;
+}
+
+/* WIDER THAN ITS FIELD WHEN A NAME NEEDS IT, and never wider than the page.
+ *
+ * A list exactly the field's width, in a narrow column, wraps "Springfield,
+ * Illinois, USA", and the only way to a place name the archive actually
+ * holds becomes a column of fragments. `right: auto` lets the box grow to the right
+ * of its field; `width: max-content` makes it as wide as its longest row
+ * wants; `min-width: 100%` keeps it at least as wide as the field, so a
+ * short list still lines up under it; and 28rem is the ceiling, so a very
+ * long row is cut by the hint's ellipsis rather than by the window. */
+.typeahead-popup {
+  position: absolute;
+  z-index: 60;
+  left: 0;
+  right: auto;
+  top: 100%;
+  margin-top: 3px;
+  min-width: max(16rem, 100%);
+  width: max-content;
+  max-width: min(28rem, 90vw);
+  background: var(--white, #fff);
+  border: 1px solid var(--line, #8a8a8a);
+  border-radius: var(--radius, 6px);
+  box-shadow: var(--shadow, 0 6px 20px rgba(0, 0, 0, 0.18));
+  /* This is the ONE place an overflow rule is allowed: the popup scrolls
+   * its own rows. It never clips anything but itself.
+   *
+   * AND THE HEIGHT IS MEASURED, NOT ROUND. 22rem (352 px) is more than a
+   * 768 px viewport has left under a field that sits at y=432 - the box ran
+   * to y=784, sixteen pixels past the fold, so the last rows were reachable
+   * only by finding a scrollbar that was itself off the screen. 20rem puts
+   * the bottom edge at y=752, on screen, and cuts the eighth row in half:
+   * that half-row is the affordance that says there is more below. The nine
+   * rows the fields ask for (limit=8 plus the reset) do not fit any height
+   * that also fits the fold; being told so is the point. */
+  max-height: 20rem;
+  overflow-y: auto;
+}
+
+.typeahead-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+}
+
+/* TWO LINES: THE NAME, AND WHAT IS KNOWN ABOUT IT.
+ *
+ * This was one flex row - label, hint, count - and it broke the moment a
+ * hint was long. The hint does not wrap (it is one fact, and a fact split
+ * over two lines reads as two), so it took all the room it wanted and left
+ * the label a column three characters wide: searching "USA" on the Heatmap
+ * drew "U", "S", "A" one letter per line beside a hint that ran off the
+ * right edge and was cut. The one row that mattered was the one that could
+ * not be read.
+ *
+ * A grid says the shape instead of hoping the widths work out. The name has
+ * the first line to itself, with the count at its end; the hint has the
+ * second, and is cut with an ellipsis if it is longer than the list is wide
+ * - `title` carries the whole of it for a hover. An option with no hint has
+ * no second row at all, so the short ones stay short. */
+.typeahead-list li[role="option"] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 0.75rem;
+  row-gap: 0.125rem;
+  align-items: baseline;
+  min-height: 44px;
+  padding: 0.5rem 0.75rem;
+  font-size: 1rem;
+  line-height: 1.3;
+  cursor: pointer;
+  color: var(--text, #1a1a1a);
+}
+
+.typeahead-list li[role="option"]:hover,
+.typeahead-list li[role="option"].is-active {
+  background: var(--surface-2, #e6eef8);
+}
+
+/* The keyboard highlight must be visible without hover: an inset ring
+ * survives on top of the hover colour. */
+.typeahead-list li[role="option"].is-active {
+  box-shadow: inset 3px 0 0 var(--focus, #1d4f91);
+}
+
+.typeahead-label {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.typeahead-label mark {
+  background: transparent;
+  color: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 2px;
+}
+
+/* NN/g: scope information visually distinct, lighter, after the label.
+ *
+ * DISTINCT, NOT SMALLER. This is the line that tells two Springfields
+ * apart ("Springfield - Illinois - USA") and names the type behind an
+ * entity - it is content, and the dashboard's floor is 16 px (see the
+ * remark over `small` in app.css). Colour carries the secondariness; the
+ * size does not. The rule lives here, once, so no view has to carry a copy
+ * of it. */
+.typeahead-hint {
+  grid-column: 1 / -1;
+  color: var(--muted, #555);
+  font-size: 1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.typeahead-count {
+  grid-column: 2;
+  grid-row: 1;
+  color: var(--muted, #555);
+  font-variant-numeric: tabular-nums;
+  padding-left: 0.5rem;
+}
+
+.typeahead-reset {
+  color: var(--muted, #555);
+  font-style: italic;
+  border-bottom: 1px solid var(--line-soft, #ddd);
+}
+
+/* "No suggestion - your text is still searched": the row that says the
+ * field did not refuse what was typed. Italic and muted, at full size. */
+.typeahead-note {
+  color: var(--muted, #555);
+  font-style: italic;
+  font-size: 1rem;
+  padding: 0.6rem 0.75rem;
+  border-top: 1px solid var(--line-soft, #ddd);
+  cursor: default;
+}
+
+/* Field-level hint under the input ("city - region - country - the
+ * archive's own addresses"). It says what the field takes, which is the
+ * one thing somebody staring at an empty box needs; full size, like the
+ * suggestion hint above. */
+/* .typeahead-help is gone: the hint moved behind the info icon beside the
+ * label, so it is styled as .hint-bubble in app.css like every other one. */
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .typeahead-popup {
+    animation: typeahead-in 80ms ease-out;
+  }
+  @keyframes typeahead-in {
+    from { opacity: 0; transform: translateY(-2px); }
+    to { opacity: 1; transform: none; }
+  }
+}

@@ -1,0 +1,247 @@
+/* ==========================================================================
+ *  The connection graph.
+ *
+ *  THE LAYOUT IS THE POINT. A legend that is an absolutely positioned
+ *  panel over the drawing covers nodes, covers the suggestion list, and on
+ *  a 1024 px screen covers the detail panel as well. Here the page is a
+ *  grid -
+ *
+ *      +---------------------------------------------+
+ *      |  toolbar (search, zoom, reset)   row 1, 1/-1 |
+ *      +--------------------------+------------------+
+ *      |  the SVG                 |  legend          |
+ *      |  row 2, column 1         |  detail panel    |
+ *      +--------------------------+------------------+
+ *
+ *  - and nothing in it is positioned. The only absolutely positioned thing
+ *  on the page is the typeahead's suggestion list, which lives in the
+ *  toolbar row and can therefore only reach over the TOP EDGE of the SVG,
+ *  never over the legend or the detail panel. tests/ui/
+ *  test_graph_legend_no_overlap.py compares the four rectangles at both
+ *  viewport sizes, before and after clicking an edge.
+ *
+ *  Nodes and edges are focusable: a graph that can only be used with a
+ *  mouse is a picture. The focus ring is drawn on the group, so it is
+ *  visible on a circle as well as on a line.
+ * ========================================================================== */
+
+#graph-root {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(17rem, 20rem);
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: var(--gap);
+  align-items: start;
+  min-height: clamp(26rem, 70vh, 46rem);
+}
+/* THE TOOLBAR RULE, the same one map.css writes down for the two map views:
+ * label over control, every control one `--control-h` tall, a group without
+ * a label still occupying the label row, tops shared. `flex-start`, not the
+ * `flex-end` app.css gives a plain toolbar: sharing the BOTTOM edge is what
+ * let the button and the zoom group sit higher than the search field. */
+.graph-toolbar { grid-column: 1 / -1; align-items: flex-start; }
+.graph-toolbar > * { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; }
+.graph-toolbar .field { flex: 1 1 16rem; max-width: 26rem; }
+.graph-toolbar .field-label { min-height: 1.5rem; line-height: 1.5rem; white-space: nowrap; }
+.graph-toolbar .field-label:empty::before { content: "\00a0"; }
+.graph-toolbar > .field--fixed { flex: 0 0 auto; }
+.graph-toolbar > * > .row,
+.graph-toolbar > * > .button,
+.graph-toolbar > * > input,
+.graph-toolbar .typeahead-input { min-height: var(--control-h); }
+.graph-toolbar > .field--date input[type="date"] { width: 10rem; }
+.graph-canvas-cell { grid-column: 1; grid-row: 2; min-width: 0; }
+.graph-side {
+  grid-column: 2;
+  grid-row: 2;
+  display: grid;
+  gap: var(--gap);
+  align-content: start;
+  min-width: 0;
+}
+@media (max-width: 900px) {
+  #graph-root { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto; }
+  .graph-canvas-cell { grid-column: 1; grid-row: 2; }
+  .graph-side { grid-column: 1; grid-row: 3; }
+}
+
+.graph-canvas {
+  /* Relative so the empty message can centre itself - and, with z-index 0, a
+   * stacking context, so nothing drawn inside the graph can ever outrank the
+   * toasts or a dialog (the note at .toasts in app.css). */
+  position: relative;
+  z-index: 0;
+  height: clamp(24rem, 62vh, 42rem);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  touch-action: none;   /* dragging pans the graph, not the page */
+}
+.graph-canvas svg { display: block; width: 100%; height: 100%; cursor: grab; }
+.graph-canvas.is-panning svg { cursor: grabbing; }
+/* The sentence in the middle of an empty drawing - "search for an entity",
+ * "Loading…", or what went wrong plus the button that tries again. */
+.graph-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  height: 100%;
+  padding: 1rem;
+  color: var(--muted);
+  text-align: center;
+}
+.graph-empty p { margin: 0; max-width: 34rem; }
+
+/* ── Nodes ────────────────────────────────────────────────────────────── */
+
+/* Two circles per node, and they must not be styled as one: `.g-body` is
+ * the bubble somebody sees, `.g-node-hit` is the invisible 44 px target
+ * around it (graph.js). Every rule below therefore names the body - a
+ * `.g-node circle` rule would fill the target as well and paint a disc the
+ * size of the target over the drawing. */
+.g-node { cursor: pointer; }
+.g-node .g-body,
+.graph-key .key-bubble {
+  fill: var(--surface);
+  stroke-width: 3;
+}
+.g-node.is-root .g-body { fill: var(--accent-tint); stroke-width: 4; }
+/* Not yet expanded: a dashed ring plus the "+" below it. Two cues, because
+ * one of them is a colour and colour alone is never the message. */
+.g-node.is-open .g-body,
+.graph-key .key-bubble--open { stroke-dasharray: 4 3; }
+/* THESE SIZES ARE SCREEN PIXELS, NOT DRAWING UNITS.
+ *
+ * Text in an SVG is scaled by the viewBox like everything else, so a 13-unit
+ * label inside a picture the fit had shrunk to 0.73 was 9.5 px on the
+ * screen - the smallest type on the page, on a view whose readers include
+ * older eyes, and smaller again with every node added. graph.js gives every
+ * one of these a `scale(1/zoom)` of its own, which cancels the viewBox
+ * exactly: what is written here is what is measured on the screen, at any
+ * zoom and any viewport (tests/ui/test_graph_expansion.py measures it). */
+.g-node .g-label {
+  font-size: 16px;
+  font-weight: 600;
+  fill: var(--text);
+  paint-order: stroke;
+  stroke: var(--white);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+.g-node .g-count,
+.graph-key .key-count { font-size: 16px; fill: var(--text); }
+.g-node .g-plus,
+.graph-key .key-plus { font-size: 18px; font-weight: 700; fill: var(--accent); }
+/* The invisible 44 px target around a bubble: painted with nothing,
+ * `pointer-events: fill` so the empty area is still a target. */
+.g-node .g-node-hit { fill: none; stroke: none; pointer-events: fill; }
+.g-node:hover .g-body { fill: var(--accent-tint); }
+.g-node:focus { outline: none; }
+.g-node:focus-visible .g-body,
+.g-node.is-selected .g-body { stroke: var(--focus); stroke-width: 5; }
+.g-node:focus-visible .g-label { text-decoration: underline; }
+
+/* ── Edges ────────────────────────────────────────────────────────────── */
+
+.g-edge,
+.graph-key .key-line { stroke-linecap: round; stroke-width: 3; }
+/* A cross-link joins two nodes that were already on the canvas. Dashed, so
+ * "this is a link between two things you already had" is visible without
+ * reading the detail panel. */
+.g-edge.is-cross,
+.graph-key .key-line--cross { stroke-dasharray: 7 5; }
+.g-edge-hit { cursor: pointer; }
+.g-edge-hit:focus { outline: none; }
+/* The handle at the middle of a connection: invisible until it is hovered
+ * or focused, and then the clearest thing on the canvas - a focus ring on a
+ * one-pixel line is not a focus ring. */
+.g-edge-handle { cursor: pointer; }
+.g-edge-group:hover .g-edge-handle { fill: var(--surface-2); fill-opacity: 0.75; }
+.g-edge-group:focus-visible .g-edge-handle,
+.g-edge-group.is-selected .g-edge-handle {
+  fill: var(--white);
+  fill-opacity: 0.85;
+  stroke: var(--focus);
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+}
+.g-edge-group:focus-visible .g-edge,
+.g-edge-group.is-selected .g-edge { stroke-width: 6; }
+.g-edge-group:focus-visible .g-edge-halo,
+.g-edge-group.is-selected .g-edge-halo { stroke: var(--focus); stroke-opacity: 0.35; }
+
+/* ── The detail panel ─────────────────────────────────────────────────── */
+
+.graph-detail { display: grid; gap: 0.5rem; align-content: start; }
+.graph-detail h2 { margin: 0; font-size: 1.125rem; overflow-wrap: anywhere; }
+.graph-detail .detail-sub { margin: 0; color: var(--muted); }
+.graph-detail .detail-empty { margin: 0; color: var(--muted); }
+.detail-types { margin: 0; padding: 0; list-style: none; }
+.detail-types li { display: flex; align-items: center; gap: 0.5rem; min-height: 2rem; }
+.detail-types .type-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.detail-types .type-count { color: var(--muted); font-variant-numeric: tabular-nums; }
+.detail-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.detail-note { margin: 0; color: var(--warn); font-weight: 500; }
+
+/* The zoom group keeps its buttons square and side by side. `align-items:
+ * center`, not `flex-end`: the group sits on the control baseline of the
+ * toolbar row and its buttons fill it. */
+.graph-zoom { display: flex; gap: 0.25rem; align-items: center; }
+.graph-zoom .button { padding-inline: 0.75rem; }
+
+/* NO RESERVED HEIGHT. The summary sits under the drawing (graph.html says
+ * why), so a line arriving moves nothing above it and there is nothing to
+ * hold open. A reserved 3 em would be 78 px of blank page between the form
+ * and the picture on a view nobody has searched yet. */
+.graph-summary { margin: 0.5rem 0 0; color: var(--muted); }
+.graph-summary:empty { display: none; }
+
+/* HOW MANY NODES ARE PINNED WHERE SOMEBODY DROPPED THEM. A pin is state, and
+ * state that is not shown is state nobody can undo - so the line is there
+ * whenever one is, and it names the control that lets them go. */
+/* The row is reserved whether or not anything is pinned: the line sits over
+ * a drawing of a fixed height, and appearing would push the graph down at
+ * the very moment a node was dropped. See updatePinned() in graph.js. */
+.graph-pinned { margin: 0.25rem 0 0; color: var(--warn); font-weight: 500; min-height: 1.5rem; }
+/* The same weight as the pinned line and the page's muted colour, not the
+ * warn colour: names left out because they would collide is a fact about
+ * the drawing, not a problem with it. */
+.graph-labels { margin: 0.25rem 0 0; color: var(--muted); font-weight: 500; }
+
+/* ── Dragging a node ──────────────────────────────────────────────────── */
+/*
+ * A node can be dragged where the reader wants it and stays there. The
+ * cursor says so before the drag: `grab` over a bubble is the gesture's own
+ * promise, and `grabbing` while it is happening is the feedback. The canvas
+ * keeps its own grab cursor for panning; a bubble's beats it because this
+ * rule is more specific.
+ */
+.g-node { cursor: grab; }
+.graph-canvas.is-dragging-node svg,
+.graph-canvas.is-dragging-node .g-node { cursor: grabbing; }
+/* A NODE THAT IS HELD WHERE IT WAS DROPPED gets a mark of its own - a small
+ * filled disc on its shoulder. A SHAPE, not a colour: the dashed ring
+ * already means "not opened yet" and a second meaning on the same stroke
+ * would make neither readable. The mark is drawn for every node and only
+ * shown for a pinned one, so pinning does not have to rebuild the drawing;
+ * the aria-label, the detail panel and the line above the graph say the word
+ * "pinned" as well, so nothing here depends on seeing the mark. */
+.g-node .g-pin-mark { fill: var(--warn); stroke: var(--white); stroke-width: 1.5; display: none; }
+.g-node.is-pinned .g-pin-mark { display: inline; }
+
+@media (prefers-reduced-motion: reduce) {
+  .graph-canvas svg { transition: none !important; }
+}
+
+/* ── The key ──────────────────────────────────────────────────────────── */
+/*
+ * Four rows, each drawing the very glyph it explains with the very rules
+ * above - a key that is a picture of the drawing cannot drift from it. The
+ * glyphs are `aria-hidden`: the sentence beside each one is the content,
+ * and a screen reader has no use for a second copy of a circle.
+ */
+.graph-key .key-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.625rem; }
+.graph-key .key-list li { display: flex; align-items: center; gap: 0.625rem; }
+.graph-key .key-glyph { flex: 0 0 44px; width: 44px; height: 32px; }
+

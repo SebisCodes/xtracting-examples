@@ -1,0 +1,125 @@
+{#- The Xtracting projects the crawler holds a key for.
+
+    WHY THIS PAGE EXISTS. A watchlist collects into exactly one project, and the
+    project decides which keys may evaluate its pages. Until this list existed
+    the only thing a person could do was type a key label and hope; a label that
+    matched nothing left documents in the queue for ever, with nothing on screen
+    saying why.
+
+    THE DASHBOARD DOES NOT MAKE PROJECTS. It cannot: a project is Xtracting's,
+    and only a key can be asked which one it opens. The crawler asks, on a
+    timer, and writes what it learned. So this page is a reading of the
+    crawler's own state, plus the one act that is the customer's - deleting a
+    configuration nobody uses.
+
+    WHAT DELETE DOES AND DOES NOT DO is said on the page itself, and it is the
+    thing most worth being unambiguous about: the watchlists go, the archive
+    stays, and the project keeps appearing in the selector at the top of every
+    view because that list is built from what was collected, not from this one.
+-#}
+{% extends "_layout.html" %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ static('css/sources.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="sources-top">
+  <div class="page-header">
+    <h1>Projects</h1>
+    <details class="page-about">
+      <summary>About this page</summary>
+      <div class="page-about-body">
+        <p class="page-purpose">The Xtracting projects the crawler's keys open, and the keys of each.</p>
+        <p>Every watchlist collects into one project. The list here is what the
+           crawler found by asking each key in its own configuration which project
+           it belongs to - so a project appears once a key for it works, and not
+           before.</p>
+        <p>Deleting a project removes its watchlists and their rules. It does not
+           touch the archive: what was already collected stays, and the project
+           keeps appearing in the selector at the top of every view.</p>
+      </div>
+    </details>
+  </div>
+
+  <p class="sources-actions">
+    <a class="button" href="/sources">Back to the Watchlist</a>
+  </p>
+</div>
+
+{#- WHERE A KEY COMES FROM IS A PAGE, NOT A VARIABLE NAME. Naming
+    XTRACTING_API_KEYS told a reader where the key goes and nothing about
+    where to get one; the link goes to the list that issues them, and the
+    variable is still named because that is where it then goes. -#}
+<p class="empty" id="projects-empty" hidden>
+  The crawler has no working key yet, so there is no project to show.
+  <a id="projects-empty-keys" href="#">Create a key in Xtracting</a>, add it to
+  <code>XTRACTING_API_KEYS</code>, and the list fills itself on the crawler&#39;s
+  next pass.
+</p>
+
+{#- The same shape as the Watchlist's own failure notice, so a person who has
+    seen one recognises the other: a title that says what did not happen, a line
+    that says why, and the way to try again. -#}
+<div class="notice notice--error verdict" id="projects-error" role="status" hidden>
+  <span class="verdict-icon" aria-hidden="true">⛔</span>
+  <p class="verdict-title">The projects could not be read</p>
+  <p class="verdict-text" id="projects-error-text"></p>
+  <div class="verdict-actions">
+    <button type="button" class="button button--secondary" id="projects-retry">Try again</button>
+  </div>
+</div>
+
+<ul class="source-list" id="project-list" aria-busy="true">
+  <li class="loading">Loading the projects…</li>
+</ul>
+
+<template id="project-item-template">
+  <li class="source-card">
+    <div class="source-card-head">
+      <div class="source-card-title">
+        <h2 data-name></h2>
+        <p class="source-card-url"><code data-id></code></p>
+      </div>
+      <div class="source-card-switch">
+        <span class="pill" data-age hidden></span>
+      </div>
+    </div>
+
+    <p class="source-card-meta">
+      <span data-keys></span>
+      <span data-watchlists></span>
+      <span data-seen></span>
+    </p>
+
+    <ul class="key-list" data-key-list></ul>
+
+    <p class="source-card-actions">
+      {#- THE PROJECT'S OWN PAGE ON XTRACTING. Everything this dashboard can
+          say about a project is what the archive holds; its defaults, its
+          perspectives and its keys are set over there, and a person who
+          wants any of those has been leaving this page by typing the
+          address. static/js/projects.js fills the href and makes it outward
+          (icons.js: new tab, arrow, and the promise in words). -#}
+      <a class="button button--secondary" data-open hidden>Open in Xtracting</a>
+      <button type="button" class="button button--danger" data-delete hidden>
+        Delete this project and its watchlists
+      </button>
+      <span class="card-meta" data-delete-note hidden></span>
+    </p>
+  </li>
+</template>
+
+<template id="project-key-template">
+  <li class="key-row">
+    <span class="key-name" data-key-name></span>
+    <code class="key-prefix" data-key-prefix></code>
+    <span class="key-effort" data-key-effort hidden></span>
+    <span class="key-translations" data-key-translations hidden></span>
+  </li>
+</template>
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="{{ static('js/projects.js') }}"></script>
+{% endblock %}

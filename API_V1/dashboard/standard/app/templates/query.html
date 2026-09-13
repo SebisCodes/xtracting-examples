@@ -1,0 +1,363 @@
+{#- Query: relevant texts within a place, with a radius, in a date range.
+
+    The form is one sentence in three groups - Where, What, When - and the
+    order is the order of the sentence at the top of the page. Where is the
+    only one that is required, and it has two ways of being answered:
+
+      an ADDRESS, resolved through GET /api/query/places, which asks back
+      when the name is ambiguous ("which Springfield?"), or
+
+      a POINT, latitude and longitude with a distance, which is what the
+      circle on the mini-map shows.
+
+    Never both at once: POST /api/query/search answers 400 for that, and the
+    page makes sure it cannot happen - choosing an address clears the
+    coordinates and typing a coordinate clears the address, with the line
+    under the group saying which of the two is in force.
+
+    The mini-map is a picture of the answer, not the answer: the same places
+    are listed underneath it in text, and every popup only repeats what the
+    list already says. Enlarge opens the same map in a native <dialog>.
+-#}
+{% extends "_layout.html" %}
+{% from "_macros.html" import typeahead, chipinput, search_actions, help_icon, help_text %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ static('vendor/leaflet/leaflet.css') }}">
+<link rel="stylesheet" href="{{ static('css/views.css') }}">
+{#- The tile server is a setting (DASHBOARD_TILE_URL); minimap.js reads it
+    from here. Empty when the app is rendered without its configuration
+    (a template test), and then the module falls back to the OSM default. -#}
+<meta name="tile-url" content="{{ request.app.state.cfg.tile_url if request.app.state.cfg is defined else '' }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Query</h1>
+  <details class="page-about">
+    <summary>About this page</summary>
+    <div class="page-about-body">
+      <p class="page-purpose">Search the archive's sources and their attributes within a place on the world, with a radius, in a date range.</p>
+      <p><strong>What to find</strong> decides which kind of object comes back. The search itself is always the same walk: the locations that answer the place, the entities standing at them, and the objects hanging off those entities. One kind at a time, because each one is a pass over every location of the place and two of them is twice the wait.</p>
+      <p>Say where either by naming a place or by giving a point and a distance - never both; the line under the field says which is in force.</p>
+      <p>With no words at all, everything written about the place is listed. A date preset sets the start and leaves the end open.</p>
+    </div>
+  </details>
+</div>
+
+<form class="filter-card query-form" id="query-form" novalidate>
+  <div class="query-groups">
+
+    <fieldset class="query-group">
+      <legend>Where</legend>
+      {#- A REAL EITHER/OR, and only one of the two on the page.
+          Not an address field with a disclosure under it - "Use
+          coordinates and a distance instead" - which puts both ways of
+          naming a place on screen at once, while the server refuses a request
+          that carries both (400: "a place or a point, not both"). A form
+          that offers two things and accepts one is a form that can only be
+          learned by getting it wrong.
+
+          The switch is the one every other view has, in the same markup and
+          with the same label, so a reader who has seen it on Diagrams or on
+          the Map already knows what it does. The half that is not chosen is
+          `hidden` - out of the page and out of the tab order, not merely
+          folded away.
+
+          Eight suggestions, not the macro's twelve: the same ten-row ceiling
+          the Events fields keep to, and an address is a long row. The hint
+          keeps the half that stops a mistake - only the archive's own
+          addresses are found here - and drops the half that describes their
+          shape; that is in the About disclosure.
+
+          A TOOLBAR, so the label row is a fixed 24 px and the control lands
+          on the same baseline as the chips box beside it and the two date
+          fields beside that (tests/ui/test_query_layout.py measures it). -#}
+      <div class="toolbar">
+        <div class="field field--fixed axis-field">
+          <span class="field-label" id="where-label">Search by</span>
+          <div class="segmented" role="group" aria-labelledby="where-label" data-where-switch>
+            <button type="button" class="button button--secondary" data-where="place"
+                    aria-pressed="true" title="A place the archive knows by name">Place</button>
+            <button type="button" class="button button--secondary" data-where="point"
+                    aria-pressed="false" title="A point on the globe and a distance around it">Coordinates</button>
+          </div>
+        </div>
+
+        <div data-where-field="place">
+          {{ typeahead("address", label="Address, city or country",
+                       suggest_url="/api/suggest/address",
+                       placeholder="Springfield",
+                       limit=8,
+                       hint="The archive's own addresses only") }}
+        </div>
+
+        <div data-where-field="point" hidden>
+          <div class="field coord-field">
+            <label class="field-label" for="q-lat">Latitude</label>
+            <input type="number" id="q-lat" name="lat" step="any" min="-90" max="90"
+                   inputmode="decimal" placeholder="47.3769">
+          </div>
+          <div class="field coord-field">
+            <label class="field-label" for="q-lng">Longitude</label>
+            <input type="number" id="q-lng" name="lng" step="any" min="-180" max="180"
+                   inputmode="decimal" placeholder="8.5417">
+          </div>
+          <div class="field">
+            <label class="field-label" for="q-distance">Distance in km{{ help_icon("q-distance") }}</label>
+            <div class="distance-row">
+              <input type="range" id="q-distance-range" min="1" max="500" step="1" value="25"
+                     aria-label="Distance in km, slider">
+              <input type="number" id="q-distance" name="radius_km" min="1" max="20000" step="1" value="25"
+                     aria-describedby="q-distance-hint">
+            </div>
+            {%- call help_text("q-distance") %}How far around the point to look. The circle drawn on the map is this distance, so what is inside it is what is searched.{% endcall %}
+          </div>
+        </div>
+      </div>
+
+      <div class="place-choices" id="place-choices" role="radiogroup"
+           aria-label="Which place do you mean?" hidden></div>
+
+      <p class="query-where" id="where-summary" aria-live="polite"></p>
+    </fieldset>
+
+    <fieldset class="query-group query-group--what">
+      <legend>What</legend>
+      {#- The same row, so the chip field starts where the address field
+          starts. It GROWS when the terms need two lines, and growing is
+          downwards only: the toolbar is top-aligned and the three groups
+          are a grid of independent columns, so nothing beside it moves. -#}
+      <div class="toolbar">
+        {{ chipinput("terms", label="Words to look for",
+                     placeholder="battery, antitrust") }}
+      </div>
+      <label class="check">
+        <input type="checkbox" id="q-all-terms">
+        Every word must appear
+      </label>
+    </fieldset>
+
+    <fieldset class="query-group" id="q-kind-group">
+      <legend>What to find</legend>
+      {#- ONE KIND AT A TIME, AND RADIO BUTTONS SAY SO.
+
+          The search runs the same way whatever is chosen: the locations that
+          answer the place, the entities standing at them, and the objects
+          hanging off those entities. This is the last step, and it is the only
+          part that changes.
+
+          It is one and not several because the archive is large. Asking for
+          two kinds is two passes over every location of a place, and on a
+          project with two million entities the second one is a minute somebody
+          spends waiting for an answer they did not ask for. A reader who wants
+          both asks twice, and gets each of them sooner than the pair.
+
+          The order is the one the archive is built in: the document, the
+          entities it names, where they are, and then what was said about them. -#}
+      {#- A TOOLBAR LIKE THE OTHERS, and for the reason the Where group gives:
+          the label row is a fixed 24 px, so the first radio lands on the same
+          baseline as the "From" and "To" fields in the column beside it. Left
+          bare, the radios sat 28 px high of the dates - one label row and its
+          gap - and the two halves of the second row did not line up.
+
+          The label earns its place rather than repeating the legend: the
+          legend says WHAT is being chosen, this says HOW MANY may be, which
+          is the thing round buttons only imply. -#}
+      <div class="toolbar">
+        <div class="field">
+          <span class="field-label" id="q-kind-label">One kind at a time</span>
+          <div class="kind-choices" role="radiogroup" aria-labelledby="q-kind-label">
+            <label class="check"><input type="radio" name="object_kind" value="source" checked> Sources</label>
+            <label class="check"><input type="radio" name="object_kind" value="entity"> Entities</label>
+            <label class="check"><input type="radio" name="object_kind" value="location"> Locations</label>
+            <label class="check"><input type="radio" name="object_kind" value="connection"> Connections</label>
+            <label class="check"><input type="radio" name="object_kind" value="market_insight"> Market Insights</label>
+            <label class="check"><input type="radio" name="object_kind" value="rating"> Ratings</label>
+            <label class="check"><input type="radio" name="object_kind" value="attribute"> Attributes</label>
+          </div>
+        </div>
+      </div>
+      {#- "With no words at all, everything written about the place is listed"
+          is a concept, read once: it is in the About disclosure now. -#}
+    </fieldset>
+
+    <fieldset class="query-group query-group--when">
+      <legend>When</legend>
+      <div class="toolbar">
+        <div class="field coord-field">
+          <label class="field-label" for="q-from">From</label>
+          <input type="date" id="q-from" name="date_from">
+        </div>
+        <div class="field coord-field">
+          <label class="field-label" for="q-to">To</label>
+          <input type="date" id="q-to" name="date_to">
+        </div>
+      </div>
+      {#- The same wording as the Events page, because they do the same
+          thing: a preset sets the START and leaves the end open. "Last 30
+          days" said "a range", which is not what the button does. They are
+          toggle buttons, and query.js keeps `aria-pressed` in step with the
+          two date fields - so a reloaded URL shows its preset as pressed. -#}
+      {#- No labels in this row, so it has no label row to line up with -
+          four buttons of one height is the whole of the rule here. -#}
+      <div class="toolbar preset-row" role="group" aria-label="Date presets">
+        <button type="button" class="button button--quiet" data-preset="30" aria-pressed="false">From 30 days ago</button>
+        <button type="button" class="button button--quiet" data-preset="365" aria-pressed="false">From a year ago</button>
+        <button type="button" class="button button--quiet" data-preset="1825" aria-pressed="false">From 5 years ago</button>
+        {#- "Any date" is the way OUT of the presets and sits at the end of
+          them; the whole group is right-aligned under the dates it sets, so
+          it ends where the "To" field ends. -#}
+      <button type="button" class="button button--quiet preset-reset"
+              data-preset="" aria-pressed="false">Any date</button>
+      </div>
+      {#- What a preset does is in the About disclosure; the buttons say
+          "From …", which is the same sentence in two words. -#}
+    </fieldset>
+    {#- INSIDE THE GRID, in the first column of the next row: with room
+        for the groups side by side the button then sits level with the
+        bottom of the tallest one instead of on a line of its own below
+        everything, and the form is one row shorter. On a narrow screen
+        the grid is one column and it falls under the fields, which is
+        where it belongs there. -#}
+    {{ search_actions(id="q-search", clear_id="q-clear", clear="custom", status_id="q-status") }}
+  </div>
+
+</form>
+
+{#- ── WHAT THE ANSWER IS ABOUT, BEFORE THE ANSWER ──────────────────────
+
+    THE CASE THIS IS FOR: a search of Houston for oil and gas comes back
+    with hundreds of documents about one politician. Nothing is wrong with
+    the search - he really is in all of them - and there is no search term
+    that means "not him". Narrowing by hand would mean guessing a word.
+
+    So the answer names its own subjects first. Every entity the place holds,
+    with how many rows of the chosen kind it accounts for, and a tick each:
+    untick the ones the question is not about and ask again. The exclusion
+    goes into the scope the search runs through (routers/api_query.py), so it
+    holds for every kind of object and not only for the one on screen.
+
+    ORDERED BY HOW MUCH OF THE ANSWER EACH ONE IS, so the ones worth
+    excluding are at the top and nobody scrolls to find them. The two boxes
+    narrow the list itself - a name and a type, the two columns - and they
+    narrow what is SHOWN, never what is ticked: a filter that silently
+    unticked what it hid would throw away a decision.
+
+    IT IS NOT A SECOND SEARCH BUTTON. The list arrives with the results, in
+    its own request, so a reader who wanted the answer has the answer; the
+    ticks only matter to the NEXT press. -#}
+<section class="card about-panel" id="about-panel" aria-labelledby="about-title" hidden>
+  <div class="card-header">
+    <h2 id="about-title" class="card-title">What this is about</h2>
+    <span class="card-meta" id="about-meta"></span>
+  </div>
+  {#- THE THREE GESTURES, SAID ONCE. A name is a whole group here - one
+      person is twenty-one rows, because the archive types them differently
+      in different documents - and nobody guesses that a name is a button. -#}
+  <p class="card-meta" id="about-lead">
+    A row leaves the results out; a <strong>name</strong> or a
+    <strong>type</strong> leaves out everything under it. The list below
+    changes at once - nothing is asked of the archive again.
+  </p>
+  <div class="toolbar about-filters">
+    <div class="field">
+      <label class="field-label" for="about-find-name">Name</label>
+      <input type="search" id="about-find-name" placeholder="Every name"
+             autocomplete="off" spellcheck="false">
+    </div>
+    <div class="field">
+      <label class="field-label" for="about-find-type">Type</label>
+      <input type="search" id="about-find-type" placeholder="Every type"
+             autocomplete="off" spellcheck="false">
+    </div>
+    <div class="field field--fixed">
+      <span class="field-label" aria-hidden="true"></span>
+      <div class="row" role="group" aria-label="Tick or untick every row shown">
+        <button type="button" class="button button--quiet" id="about-all">Tick all</button>
+        <button type="button" class="button button--quiet" id="about-none">Untick all</button>
+      </div>
+    </div>
+  </div>
+  <div class="table-scroll">
+    <table class="table about-table">
+      <thead>
+        <tr>
+          <th scope="col" class="about-tick">Search</th>
+          <th scope="col">Name</th>
+          <th scope="col">Type</th>
+          <th scope="col" class="num" id="about-count-head">Rows</th>
+        </tr>
+      </thead>
+      <tbody id="about-rows"></tbody>
+    </table>
+  </div>
+  {#- NO PRESS. The rows are already here - one search brought the whole
+      block - so a tick is a question about what to DRAW, and drawing costs
+      nothing. The list under this changes as the ticks change. -#}
+  <div class="toolbar about-actions">
+    <p class="field-help" id="about-note"></p>
+  </div>
+</section>
+
+<div class="grid grid--main-aside query-layout">
+  <section class="card results" aria-labelledby="results-title">
+    <div class="card-header">
+      <h2 id="results-title" class="card-title">Results</h2>
+      <div class="results-head-right">
+        <span class="card-meta" id="results-meta"></span>
+        {#- HOW MANY AT ONCE. The rows are already here - one search brings a
+            block of two hundred - so this is a question about drawing, not
+            about fetching, and it costs one re-render. A hundred cards is
+            where a modest machine starts to feel it, which is why the list
+            stops there. -#}
+        <label class="results-per" for="q-per-page">
+          <span class="results-per-label">Per page</span>
+          <select id="q-per-page">
+            <option value="25" selected>25</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+        </label>
+      </div>
+    </div>
+    {#- Said once for the whole result list: this archive's documents have
+        no names of their own (sources.text_name is an id in every row), so
+        a heading shown here was read off the address. query.js unhides it
+        only when a card on the page actually carries a derived name. -#}
+    <p class="card-meta" id="results-derived-note" data-derived-note hidden></p>
+    <div id="results" aria-busy="false">
+      <p class="empty">Name a place, or give a point and a distance, then press Search.</p>
+    </div>
+    <nav class="pager" id="results-pager" aria-label="Pages of results" hidden>
+      <button type="button" class="button button--secondary" data-page-prev>Previous</button>
+      <span class="pager-info" id="results-page-info" aria-live="polite"></span>
+      <button type="button" class="button button--secondary" data-page-next>Next</button>
+    </nav>
+  </section>
+
+  {#- "Where you are searching", not "Map": the pins are the addresses of the
+      PLACE, drawn from the place predicate alone, and they are the same three
+      whether five texts matched or none. Headed "Map" with a bare count under
+      it, this panel was read as a second answer to the question the Results
+      panel had just answered with "no results" - two numbers on one screen,
+      disagreeing. The heading says what the picture is of; query.js writes
+      the caption to match. -#}
+  <aside class="card minimap-card" aria-labelledby="minimap-title">
+    <div class="card-header">
+      <h2 id="minimap-title" class="card-title">Where you are searching</h2>
+      <button type="button" class="button button--secondary" id="minimap-enlarge">Enlarge</button>
+    </div>
+    <div id="minimap" class="minimap" role="region" aria-label="Map of the places this search covers"></div>
+    <p class="minimap-caption" id="minimap-caption">The map fills once a search has run.</p>
+    <ul class="minimap-places" id="minimap-places"></ul>
+  </aside>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{#- Leaflet as a classic script, so the global L exists before any module
+    runs: classic scripts execute during parsing, module scripts after it. -#}
+<script src="{{ static('vendor/leaflet/leaflet.js') }}"></script>
+<script type="module" src="{{ static('js/query.js') }}"></script>
+{% endblock %}

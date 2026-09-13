@@ -1,0 +1,917 @@
+/* ==========================================================================
+ *  Diagrams - the scope strip, the tabs, and a grid of chart cards.
+ *
+ *  app.css owns the tokens, the buttons, the cards, the tablist and the
+ *  legend rows; this file only adds what a page full of charts needs on top
+ *  of them. Nothing here redefines a token.
+ *
+ *  NO `overflow` ON ANYTHING THAT CAN HOLD THE SEARCH FIELD. The scope
+ *  search is a typeahead and its suggestion list is absolutely positioned:
+ *  an `overflow: hidden` on the form, the card or a grid cell clips the
+ *  list away and leaves no trace (see the warning at the top of
+ *  typeahead.css). The one box that scrolls is `.table-scroll`, which
+ *  holds numbers and no field.
+ *
+ *  The canvas needs a parent with a HEIGHT. Chart.js is told not to keep an
+ *  aspect ratio (charts.js), so it fills whatever it is given; a parent of
+ *  `auto` height collapses to nothing and the chart disappears - which
+ *  looks exactly like a chart with no data.
+ * ========================================================================== */
+
+/* ── The six scopes ───────────────────────────────────────────────────── */
+
+.scope-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.scope-nav ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* The caption in front of a strip of buttons. Two strips carry the same
+ * words for different things ("Market Insights" is a subject in one and a
+ * set of charts in the other), so each one says which it is - visibly, and
+ * as its accessible name (aria-labelledby in diagrams.html). */
+.strip-label {
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.scope-nav .nav-button { border: 1px solid var(--line-soft); }
+.scope-nav .nav-button[aria-current="page"] {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
+}
+
+/* ── Search and the tab strip ─────────────────────────────────────────── */
+
+/* THE SEARCH ROW IS A TOOLBAR, so app.css's one alignment rule governs it:
+ * every control 44 px with its top on one line, every label above its own
+ * control, and the cell with no label of its own - the button - given the
+ * label row so it cannot float up. Only the widths are said here.
+ *
+ * Not a `.row` with `align-items: flex-end`, which looks identical until
+ * a field carries something under it and the row goes crooked.
+ * tests/ui/test_toolbar_alignment.py measures this one. */
+/* THE TITLE, THE DISCLOSURE AND THE TWO HEARTBEATS ON ONE LINE.
+ *
+ * `.page-about` takes `flex-basis: 100%` everywhere else, and a line of its own
+ * is right on a page whose heading is a sentence long. Here it is 40 px between
+ * the reader and the first chart, on a page called Diagrams where at 1024x768
+ * the first chart is barely above the fold - and the heading is two words. The
+ * Log does the same, for the same reason, in logs.css.
+ *
+ * `flex-basis: auto` and not a row of its own: the header still wraps when
+ * there is no room, so a long scope name pushes it back under the title rather
+ * than squeezing the pills. */
+.diagrams-page-header .page-about { flex-basis: auto; }
+
+/* THE SENTENCE ABOUT THE TERM STANDS BESIDE THE BUTTONS, NOT UNDER THEM.
+ *
+ * This card is three stacked rows on the tabs that resolve a term: the field,
+ * then Search and Clear, then the notice that says what the term turned out to
+ * mean ("Apple matched the bucket Apple (Apple, Apple Inc.)"). That third row
+ * is 46 px plus its gap, and it is 46 px between the reader and the first
+ * chart on a page called Diagrams - where at 1024x768 the first chart is
+ * barely above the fold.
+ *
+ * The buttons are 300 px of a 992 px card, so the sentence fits beside them
+ * with room to spare, and it wraps back under them when it does not.
+ *
+ * THE BUTTONS KEEP THE LEFT EDGE, which is not a detail: the design system
+ * puts the ask at the form's own left edge and tests/ui/test_search_button.py
+ * measures it on eleven forms. Putting the FIELD beside them was tried first
+ * and breaks exactly that - the button then starts 400 px in. The field keeps
+ * its own line for the same reason. */
+.diagrams-search {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.5rem 0.75rem;
+}
+.diagrams-search > .diagrams-search-row { flex: 1 1 100%; }
+.diagrams-search > .query-actions { flex: 0 0 auto; }
+.diagrams-search > #diagrams-resolved { flex: 1 1 20rem; margin: 0; }
+/* AND ON A SMALL SCREEN IT WEARS THE ROW'S HEIGHT. Beside the buttons the
+ * sentence has 680 px and takes two lines, so with `.notice--tight`'s 8 px
+ * above and below it stands 66 px tall against the 44 px row it shares - and
+ * those last 22 px are the difference between the first chart being on the
+ * first screen of a 768 px window and being three pixels under it. The line
+ * height is untouched; only the air around it comes down. */
+@media (max-width: 1196px) {
+  .diagrams-search > #diagrams-resolved { padding-block: 0.125rem; }
+}
+
+.diagrams-search-row { gap: 0.5rem 0.75rem; }
+.diagrams-search .typeahead { flex: 1 1 22rem; max-width: 32rem; }
+
+/* THE 4 PX THE TYPEAHEAD DOES NOT GET FROM `.field`.
+ *
+ * `.field` is a flex column with a 0.25 rem gap under its label (app.css),
+ * and that gap is what puts a labelled control on the same line as a
+ * button which carries the whole label row as a top margin. `.typeahead`
+ * is `display: inline-block` (typeahead.css, loaded after app.css and the
+ * same specificity, so it wins), which switches the flex column off - and
+ * with it the gap. The row is then 4 px crooked, which is exactly what the
+ * toolbar rule measures. Put the gap back where the flex would have drawn
+ * it, in the one place a `.typeahead` is a toolbar cell on this view. */
+.diagrams-search-row > .typeahead > .field-label { margin-bottom: var(--label-gap); }
+/* The Object/Type switch is as wide as its two words and no wider: it is a
+ * question about the field beside it, not a field of its own. */
+
+/* The suggestion list has to END above the fold.
+ *
+ * The search box on this page sits under a header, a purpose line and the
+ * scope strip - about 460 px down - so typeahead.css's 22 rem of list ran
+ * past the bottom of a 768 px window and the last suggestions could only be
+ * reached by scrolling the page. The list itself is asked for eight
+ * suggestions (diagrams.html); on a short window it also gets a shorter
+ * box. The overflow is on the popup, which is the one element allowed to
+ * have one - it clips nothing but its own rows. */
+@media (max-height: 820px) {
+  .diagrams-search .typeahead-popup { max-height: 17rem; }
+}
+
+.diagrams-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.5rem var(--gap);
+}
+.tabs-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1 1 30rem;
+}
+.tabs { flex: 1 1 26rem; }
+/* The tabs are the primary control of this page: they get the full 44 px
+ * even though app.css already gives every tab a comfortable target. */
+.tabs [role="tab"] { min-height: var(--control-h); }
+
+/* THE TAB STRIP GETS ITS OWN ROW BEFORE IT WRAPS INTO THREE.
+ *
+ * Eight tabs and a timeframe toolbar side by side leave the tabs about half
+ * the width, and at 1024 px they wrapped into THREE rows of 44 px: the
+ * toolbar block measured 136 px tall and the first chart's plot area started
+ * at y=789 in a 768 px window - on a page called Diagrams, not one chart was
+ * on the first screen. Full width, the same eight tabs fit in one row, and
+ * the toolbar sits under them.
+ *
+ * The breakpoint is the width at which the two stop fitting beside each
+ * other, not a device: eight tabs and the eight-word period select need
+ * about 1360 px between them, and at 1440 the last tab ("Events") was still
+ * being orphaned onto a line of its own. Above it the page keeps the
+ * compact single row. */
+@media (max-width: 100rem) {
+  .diagrams-toolbar { flex-direction: column; align-items: stretch; }
+  .tabs-row { flex: 0 0 auto; }
+  .diagrams-toolbar .timeframe-toolbar { justify-content: flex-start; }
+}
+
+/* ── The summary band ─────────────────────────────────────────────────────
+ *
+ * ONE BAND PER TAB, ABOVE THE GRID, ALWAYS FULL WIDTH: the newest sources,
+ * the most extreme ratings, the connection matrix. It is a section of its own
+ * and not the first row of the grid, because the grid is a picture of
+ * COMPARISONS - equal cells, equal heights, one fixed plot each - and a
+ * summary is not one of the things being compared. It is the answer the
+ * reader came for, and it is allowed to be as tall as its data asks.
+ *
+ * A band holding two charts (the negative and the positive end of a scale)
+ * puts them side by side on a wide window and one under the other on a
+ * narrow one, exactly as the grid does. A band holding ONE chart fills the
+ * width.
+ *
+ * A FLEX ROW AND NOT THE GRID'S OWN `auto-fit`, and that is measured rather
+ * than a preference. With the grid's own `repeat(auto-fit, minmax(30rem,
+ * 1fr))` the connection matrix - the one chart that has to be AT FULL
+ * WIDTH - comes out 696 px wide in a 1440 px window: auto-fit collapses a
+ * track only when NOTHING is in it, and anything spanning `1 / -1` keeps
+ * every track occupied. A flex line has no tracks to collapse and needs no
+ * such reasoning: one card grows into the whole of it, two share it, and a
+ * third wraps.
+ */
+/* THE SUMMARY, AT THE FOOT OF THE PAGE, BEHIND A RULE.
+ *
+ * The rule is what makes the difference between "more of the same" and "a
+ * different kind of thing": under a grid of equal cards, a full-width list
+ * with no line above it reads as a card that failed to line up. Above it
+ * sits the word - the reader has scrolled past every chart to get here and
+ * is owed a heading rather than a guess.
+ *
+ * The space above is larger than the gap between the cards, and that is the
+ * whole point of a separator: the distance says "a new section" before the
+ * line does. */
+.chart-summary {
+  margin-top: calc(var(--gap) * 2);
+  padding-top: var(--gap);
+  border-top: 2px solid var(--line);
+}
+.chart-summary-title {
+  margin: 0 0 var(--gap);
+  font-size: 1.25rem;
+}
+
+/* ── The list at the foot of a tab ─────────────────────────────────────── */
+/*
+ * TWO COLUMNS, AND THE LEFT ONE IS THE FACT. On Attributes that is
+ * "name: value unit"; on Market it is the entity and its two readings; on
+ * Sources it is the document. The right column is what the document said,
+ * which is prose and takes the room prose takes.
+ *
+ * It wraps to one column under 48 rem, where two columns of half a phone are
+ * two columns of broken words.
+ */
+.summary-panel { width: 100%; }
+.summary-panel-title { margin: 0 0 0.25rem; font-size: 1.0625rem; }
+.summary-panel-note { margin: 0 0 var(--gap); color: var(--muted); }
+
+.summary-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line-soft);
+}
+.summary-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: 0.5rem var(--gap);
+  padding: 0.625rem 0;
+  border-bottom: 1px solid var(--line-soft);
+  align-items: start;
+}
+@media (max-width: 48rem) {
+  .summary-row { grid-template-columns: minmax(0, 1fr); }
+}
+.summary-fact { margin: 0; }
+/* The name is the label and the value is the fact, so the value is the one
+ * that carries the weight - the reverse of every other row on this page,
+ * where the name IS the thing being counted. */
+.summary-name { color: var(--text); }
+.summary-value { color: var(--text); }
+.summary-meta { margin: 0; color: var(--muted); }
+.summary-date { font-variant-numeric: tabular-nums; }
+.summary-text { margin: 0; color: var(--text); }
+/* Quiet, and never the widest thing in the row: a link that is a whole
+ * address wraps, and a wrapped address in a right-hand column pushes the
+ * fact beside it out of line. */
+.summary-source { overflow-wrap: anywhere; }
+/* The button that opens the rest of a sentence sits IN the sentence, on the
+ * text baseline, and reads as a word rather than as a control. */
+.summary-more {
+  margin-left: 0.375rem;
+  padding: 0 0.25rem;
+  min-height: 0;
+  font-size: inherit;
+  text-decoration: underline;
+}
+
+.chart-band {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--gap);
+  margin-bottom: var(--gap);
+}
+.chart-band .chart-card { flex: 1 1 30rem; min-width: 0; }
+/* A summary chart that asked for the whole width takes it here as well: the
+ * band is a row, and `full` means one per line. */
+.chart-band .chart-card--full { flex: 1 1 100%; }
+@media (max-width: 40rem) {
+  .chart-band .chart-card { flex: 1 1 100%; }
+}
+/* A BAND CARD TAKES ITS HEIGHT FROM ITS DATA. --chart-h is set per card by
+ * static/js/charts.js (bandSize), so nothing is stated here except that the
+ * card may not clamp what the card in the grid clamps: the title of a summary
+ * is read, not compared with seven others, and its purpose line is one
+ * sentence rather than a reserved box. */
+/* TWO CLASSES ON THE CARD, and that is not a flourish. The rule these
+ * override - `.chart-card .chart-purpose { min-height: 3rem }` - carries the
+ * same specificity and is written LATER in this file, so it won this at
+ * source order and the band reserved two lines it does not need. It went
+ * unnoticed because the sentence happened to be two lines long anyway; the
+ * cost only showed at 1024, where the band's plot sat 24 px below the fold
+ * and nothing in the file explained why. */
+.chart-card.chart-card--band .card-title { min-height: 0; -webkit-line-clamp: 3; }
+.chart-card.chart-card--band .chart-purpose { min-height: 0; -webkit-line-clamp: 3; }
+/* ONE LINE OF IT ON A SMALL SCREEN. The band is the first thing under the
+ * toolbars, so its purpose line is the last 24 px between the plot and the
+ * fold. The whole sentence stays in the ⓘ beside the title and in the
+ * element itself - it is clipped, not dropped, so a screen reader still
+ * reads all of it. */
+@media (max-width: 1196px) {
+  .chart-card.chart-card--band .chart-purpose { -webkit-line-clamp: 1; }
+}
+
+/* WHERE THE DATA ASKS FOR MORE WIDTH THAN THE PAGE HAS. A matrix wants one
+ * column per category, each as wide as the widest name on its axis; drawn
+ * narrower, the names are cut to their column and then dropped altogether.
+ * So the canvas is drawn at the width it asked for and the box scrolls -
+ * which is what the enlarge popup does with the same arithmetic. Only on a
+ * card that needs it: an overflow on every card would clip the suggestion
+ * list of any field that ever landed in one (the warning at the top of this
+ * file). */
+.chart-card--band .chart-canvas { overflow-x: auto; overflow-y: hidden; }
+/* THE BOX A CHART SIZED FROM ITS DATA IS DRAWN IN fills the room the card
+ * kept for it (--chart-h). Without the height it is an auto block, Chart.js
+ * finds no height to fill and falls back to its own aspect ratio - which on
+ * the connections tab was a canvas 150 px tall inside a card 420 px tall,
+ * eleven bars crushed into the top of it and every name dropped for want of
+ * room that was there all along.
+ *
+ * The band and a full-width card (`grow` on the ChartSpec) ask for the
+ * same sizing, and it is the same box. */
+.chart-wide { height: 100%; }
+
+/* ── The grid of charts ───────────────────────────────────────────────── */
+
+/* TWO COLUMNS, AND NEVER THREE.
+ *
+ * It was `auto-fit` with a 30rem minimum, which is two columns on a laptop
+ * and three or four on a wide screen - and a horizontal bar chart in a third
+ * of a 1920 px window is a column of names with a stub of colour beside it.
+ * Every chart here is at least half the page now, which is the width a list
+ * of names needs, and the ones whose names are long take the whole of it
+ * (`width="full"` on the ChartSpec).
+ *
+ * The price is that a wide screen shows six cards instead of nine, which is
+ * the right trade for a page nobody reads across: this is a grid of pictures
+ * to be read one at a time, not a dashboard of tiles to be taken in at
+ * once. */
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--gap);
+}
+/* One chart per row on a narrow screen is not a downgrade: a bar chart of
+ * twenty-five categories in half a phone is unreadable either way. */
+@media (max-width: 60rem) {
+  .chart-grid { grid-template-columns: 1fr; }
+}
+
+/* A CHART THAT ASKS FOR MORE THAN ONE CELL.
+ *
+ * `full` takes the row: the chart that IS the subject of a tab - "Market
+ * insights by topic" - is not one card among six, and a list of topics has
+ * something to do with width.
+ *
+ * `half` is a PAIR, and it is a row of its own rather than a column count,
+ * because the grid is auto-fit and nobody knows how many columns it has. The
+ * pair spans the grid and splits itself, so each card gets just under half
+ * at any width - which is what the two matrices need: at a third of the grid
+ * their axis names are drawn over each other. Below the breakpoint they
+ * stack, like everything else here. */
+.chart-card--full { grid-column: 1 / -1; }
+.chart-pair {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  gap: var(--gap);
+  align-items: stretch;
+}
+
+/* THE HOLES AT THE END OF THE LAST ROW.
+ *
+ * Nine cards in a grid four wide leave three, and a hole in a grid of boxes
+ * reads as a card that failed to load. This is what says otherwise: the same
+ * height as a card, a dashed line so faint it is nearly the page ground, and
+ * nothing in it. It is `aria-hidden` in the markup, so it exists for the eye
+ * only - a screen reader counts the charts there are.
+ *
+ * NOT A CARD. No background, no shadow, no border of its own: the moment it
+ * looks like a card it is a broken one. `--chart-h` plus the furniture of a
+ * card is what makes it the same
+ * height as its neighbours without repeating any of their numbers.
+ */
+.chart-placeholder {
+  min-height: calc(var(--chart-h, 17rem) + 6rem);
+  border: 1px dashed var(--line-soft);
+  border-radius: var(--radius-lg);
+  background: none;
+  pointer-events: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .chart-placeholder { border-color: var(--line); }
+}
+:root[data-theme="dark"] .chart-placeholder { border-color: var(--line); }
+
+/* What the page is doing, while it is doing it. Between the tabs and the
+ * charts, where the reader is already looking. */
+.grid-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin: 0 0 var(--gap);
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid var(--accent);
+  background: var(--accent-tint);
+  color: var(--text);
+}
+/* A tab that failed to load keeps the previous tab's cards on screen and
+ * says so here, with the Try again button beside the sentence. The line is
+ * the same live region either way, so the failure is announced exactly
+ * once; only its colour says which kind of news it is. */
+.grid-status.is-error {
+  border-left-color: var(--error);
+  background: var(--error-tint);
+}
+.grid-status .button { flex: 0 0 auto; }
+
+.chart-card { display: flex; flex-direction: column; gap: 0.5rem; }
+
+/* EVERY CHART STARTS AT THE SAME HEIGHT AND IS THE SAME SIZE.
+ *
+ * The header wrapped: title, count, Enlarge and Save image sat in a
+ * wrapping flex row, so a long title pushed the two buttons onto a second
+ * line - on some cards and not others. That moved the picture down by a
+ * button's height on exactly those cards, and since the plot fills what is
+ * left, it also made them shorter. Eight charts on one screen then began at
+ * four different heights in three different sizes, which is nothing about
+ * the data.
+ *
+ * So the header is ONE line that cannot wrap, and the title gives way
+ * instead of the buttons: it is the part that can be read in full elsewhere
+ * (the tooltip carries it, and the enlarge dialog prints it whole).
+ * The purpose under it is always two lines high, whether it needs one or
+ * two, and the three lines that come and go moved below the picture
+ * (templates/diagrams.html). What is left above the plot is a constant. */
+.chart-card .card-header {
+  display: flex;
+  flex-wrap: nowrap;
+  /* The title is two lines tall; the count and the three icons sit at its
+   * top, where they line up across the row of cards. */
+  align-items: flex-start;
+  gap: 0.25rem 0.75rem;
+  min-height: 2.25rem;
+}
+/* TWO LINES, ALWAYS TWO LINES.
+ *
+ * One line with an ellipsis makes the headings on the Market Insights tab
+ * unreadable: "Short-term outlook per period" and "Long-term outlook per
+ * period" both cut to "Short-term outlook per p…", which is the
+ * same six words for two different charts. A title one cannot read is worse
+ * than a card one line taller.
+ *
+ * TWO LINES, ALWAYS RESERVED - even on the cards that need one.
+ *
+ * The room costs 24 px above every chart and it buys the rule this whole
+ * page is held to: everything that shares a row is the same size, at the
+ * same height. Without it a card whose title wraps ("Importance by
+ * perspective" at 1024 px) puts its plot 11 px below its neighbour's, and
+ * six charts on a tab then draw at two different heights and two different
+ * sizes - the same fault the fixed purpose line below prevents, one element
+ * higher up.
+ *
+ * It is paid for on a 1024 px screen, where the first plot is already
+ * fighting for the fold. A row that does not line up is a fault on every
+ * screen; a plot that needs one scroll is a fault on the smallest one.
+ * tests/ui/test_diagrams_labels.py measures the first, and it is measured
+ * at both viewports.
+ *
+ * Past two lines the clamp cuts, and the whole of it is in the tooltip and
+ * in the enlarged chart. */
+.chart-card .card-title {
+  flex: 1 1 auto;
+  min-width: 0;                    /* a flex item may shrink below its text */
+  margin: 0;
+  min-height: calc(2 * 1.3em);     /* two lines of this line-height */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.3;
+}
+/* THE CORNER OF THE CARD: the two icons, and the count under them.
+ *
+ * Not between the title and the icons, where a long title squeezes it out
+ * first and where it reads as part of the heading. It is a
+ * fact about the card, so it belongs with the card's own controls - under
+ * them, on the same right edge, which is also the only place it can go
+ * without adding a line to a header whose height every other card copies. */
+.chart-tools {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  /* NO GAP, AND THE COUNT IS SMALL. The header is as tall as the taller of
+     the title (two reserved lines, 42 px) and this column, and every pixel
+     this column wins is a pixel the first chart moves down the page - at
+     1024x768 the plot is already fighting for the fold
+     (tests/ui/test_diagrams_q_preserved.py measures it). 28 + 16 is what
+     fits beside two lines of title. */
+  gap: 0;
+}
+.chart-tool-row { display: flex; gap: 0.25rem; }
+/* The count is a fact about the card, not a heading: one small line under
+ * the icons, on the same right edge. */
+.chart-card .card-header .card-meta { font-size: 0.8125rem; line-height: 1.2; }
+.chart-card .card-header .card-meta {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+}
+/* THE TWO ICONS IN A CARD'S CORNER. Square, so the pair reads as one group
+ * rather than two buttons of different widths.
+ *
+ * 1.75rem is 28 px - over the 24 px WCAG 2.5.8 asks of a target, and no
+ * bigger than it has to be. It was 36, which was "comfortably over" and cost
+ * the page 12 px of height the moment the row count moved UNDER the icons:
+ * the header is the tallest of the title (two lines, 42 px) and this column,
+ * and at 36 the column won. At 1024x768 those 12 px are the difference
+ * between the first chart being on the screen and being under the fold,
+ * which tests/ui/test_diagrams_q_preserved.py measures. */
+.chart-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  min-height: 0;
+  padding: 0;
+}
+.chart-icon .icon { display: block; }
+/* A TOGGLE THAT LOOKS THE SAME IN BOTH STATES IS ONE NOBODY TRUSTS: the
+ * numbers button is filled while the table under it is open. */
+.chart-icon.is-on { background: var(--accent-tint); color: var(--accent); }
+/* Opened by that button, and by print.css for paper - so the element stays
+ * a <details> and only its own summary goes. */
+.chart-table > summary[hidden] { display: none; }
+
+/* ── The ⓘ beside a chart's title ─────────────────────────────────────────
+ *
+ * The button is app.css's `.hint-button` and needs nothing here. The BUBBLE
+ * does: everything above the plot on a card is a constant height (the rule
+ * three paragraphs up), so a bubble that opened in the flow would push the
+ * picture down by three lines on the one card whose ⓘ is open - which is the
+ * exact fault the reserved title and purpose lines were written to prevent.
+ *
+ * Out of the flow, hung under the header, it opens OVER the card and moves
+ * nothing. The shadow and the opaque ground are what make it readable there:
+ * it is standing on top of a sentence and a chart.
+ */
+.chart-card .card-header { position: relative; }
+/* The header does not wrap (the rule two paragraphs up), so every cell in it
+ * has to refuse to be squashed - the three icons already do (.chart-icon),
+ * and a 24 px target shrunk to 18 by a long title is one below the floor
+ * WCAG 2.5.8 sets. It sits at the TOP of the row, beside the first line of a
+ * title that is two lines tall. */
+.chart-card .card-header > .hint-button { flex: 0 0 auto; align-self: flex-start; }
+.chart-card .card-header > .hint-bubble {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  right: 0;
+  z-index: 3;
+  max-width: none;
+  box-shadow: var(--shadow-lg);
+}
+@media print {
+  /* On paper there is nothing to press and nothing to hover, so app.css
+     shows every bubble - and an absolutely positioned one would print on top
+     of the chart it explains. Here it goes back into the flow, on a line of
+     its own under the title. */
+  .chart-card .card-header { flex-wrap: wrap; }
+  .chart-card .card-header > .hint-bubble {
+    position: static;
+    flex: 1 0 100%;
+    box-shadow: none;
+  }
+}
+
+/* TWO LINES, ALWAYS. A one-line purpose on one card and a two-line one on
+ * the next moved the second card's chart down by 22 px. Clamped as well as
+ * reserved, so a long sentence cannot push it the other way; the whole
+ * sentence is in the title attribute and in the enlarge dialog. */
+.chart-card .chart-purpose {
+  /* TWO LINE BOXES EXACTLY: 2 x 1.5 (the body line-height) x 1rem. It was
+     2.75rem, which is what one line plus a little air comes to - so a
+     one-line purpose sat in 44 px and a two-line one in 48, and the card
+     with the longer sentence had its chart 4 px lower than the other five.
+     Measured at 1024 px, where the sentences wrap soonest. */
+  min-height: 3rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* WHAT HAPPENED TO THE LABELS, when there was no room for them. Not a
+ * warning - nothing went wrong, the chart is simply too crowded to label at
+ * this size - so it reads as the muted line it is, in the same place on
+ * every card. */
+.chart-labels { margin: 0; color: var(--muted); font-size: 1rem; }
+/* 1 rem, not 0.9375: this line explains the chart, and the numbers under it
+ * are what an older reader leans in to read - never under 16 px. */
+.chart-purpose { margin: 0; color: var(--muted); font-size: 1rem; }
+
+/* AND ONE LINE EACH ON EVERY CARD, ON A SMALL SCREEN.
+ *
+ * WRITTEN AFTER THE TWO RULES IT OVERRIDES, and that is not tidiness: both
+ * selectors are one class and one element, so this is decided by source
+ * order and nothing else. Written above them it changes nothing at all -
+ * which is exactly what it did, and it measured as "the media query does not
+ * work" rather than as what it was.
+ *
+ * A grid card reserves two lines for its title and two for its purpose so
+ * that six plots in a row start at the same height. That is right, and at
+ * 1024x768 it costs 47 px of a screen where the first chart was starting
+ * BELOW the fold - on a page called Diagrams.
+ *
+ * One line each keeps the property that matters - every card reserves the
+ * same, so every plot still starts at the same height - and gives the room
+ * back. At the width this applies to, a card is about 480 px and nearly
+ * every title in the registry is one line anyway; the ones that are not are
+ * clipped with an ellipsis, and the whole of both sentences is still in the
+ * title attribute, in the ⓘ beside the heading, and in the enlarge dialog.
+ *
+ * Measured at 1024x768 on the Summary tab: the first plot moved from y=784
+ * to y=737 in a 768 px window - from just below the fold to above it. */
+@media (max-width: 1196px) {
+  .chart-card .card-title { min-height: 1.3em; -webkit-line-clamp: 1; }
+  .chart-card .chart-purpose { min-height: 1.5rem; -webkit-line-clamp: 1; }
+}
+
+/* One card wide, for the answer that replaces the charts (a term nothing
+ * is called). */
+.chart-grid-empty { grid-column: 1 / -1; }
+.chart-key { margin: 0; color: var(--muted); font-size: 1rem; }
+/* --chart-h is the height a card keeps for its picture, and the empty state
+ * (app.css) reads it too - so a card with nothing to draw is exactly as tall
+ * as one that drew. */
+.chart-card { --chart-h: 17rem; }
+.chart-canvas { position: relative; height: var(--chart-h); min-height: 12rem; }
+.chart-canvas canvas { max-width: 100%; }
+/* A card with nothing to draw hides the box entirely (static/js/charts.js
+ * sets [hidden] on it) and collapses to title, purpose and one line. Six
+ * blank 272 px boxes made an empty period 2.9 screens of white. */
+.chart-card .empty { padding: 0.5rem 0; }
+
+/* THE SHOW/HIDE TOGGLES ARE A TABLE, TWO ROWS - not a loose row of
+ * controls.
+ *
+ * Not a wrapping flex line: eight sentiments would break wherever the card
+ * happens to end, so no two cards agree about where a control is and
+ * nothing lines up under anything. A grid of two rows filled COLUMN first
+ * gives the shape of a table - equal cells, aligned tops, a second row
+ * directly under the first - which is the same rule the toolbars follow
+ * ("elements in one row are the same size"). Eight series make four
+ * columns of two; two series make one column of two.
+ *
+ * The markup is legend.js's, shared with the map and the graph; only its
+ * layout on a chart card is said here. */
+.chart-legend:empty { display: none; }
+.chart-legend .legend-title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+/* ONE COLUMN, one toggle per line.
+ *
+ * Neither a wrapping row nor a two-row grid that flows sideways - both
+ * leave the boxes offset against one another. A single column settles it by
+ * construction: every checkbox shares one left edge and its name runs to
+ * the right of it, so the eye follows one line down instead of hunting a
+ * grid. Long series names do not decide where the next box lands.
+ *
+ * No sideways overflow: the list grows downwards, and a chart with many
+ * series makes a taller card rather than a scrolling strip. */
+/* A KEY, NOT A COLUMN OF BUTTONS.
+ *
+ * Every entry was a full-width button 36 px tall, one per row: eight series
+ * made a block of controls as tall as the chart it belonged to, and it read
+ * as something to work through rather than as a key to glance at. It is the
+ * shape the Dashboard's own charts use now - a swatch, a name, wrapped
+ * along the bottom of the picture - and each one is still a real button that
+ * hides its series, with the same aria-pressed as before. */
+.chart-legend .legend-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.125rem 0.75rem;
+}
+.chart-legend .legend-row { min-height: 0; display: flex; align-items: center; }
+.chart-legend .legend-toggle {
+  padding: 0.125rem 0.25rem;
+  min-height: 0;
+  border: 0;
+  background: none;
+  gap: 0.375rem;
+  justify-content: flex-start;
+  /* SAID HERE AS WELL AS IN app.css, and that is deliberate rather than
+     careless. The row wraps so that the ⓘ's bubble can take a line of its
+     own, and a toggle whose flex-basis is 0 shares that line instead and
+     comes out 0 px wide - which on paper, where every bubble is shown, is a
+     legend of blank rows (app.css says it at length). This is the one
+     legend the Diagrams page owns, and it states its own base size rather
+     than inheriting a number from a file four screens away. */
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.chart-legend .legend-count { display: none; }
+/* Small, because it is a key and not a colour chooser. */
+.chart-legend .legend-swatch { width: 0.75rem; height: 0.75rem; border-radius: 2px; }
+.chart-legend .legend-toggle:hover { background: var(--surface-2); }
+
+/* What the card has just done - the saved file's name, or why there is
+ * none. Muted, one line, and it stays until the next thing happens. */
+.chart-status { margin: 0; color: var(--muted); font-size: 1rem; overflow-wrap: anywhere; }
+
+/* ── Print ────────────────────────────────────────────────────────────── */
+/*
+ * print.css does the heavy lifting (cards unbroken, colours forced, the
+ * data tables shown). Here: the controls that cannot be used on paper go,
+ * and the numbers table sheds the disclosure it does not need - charts.js
+ * opens every <details> before printing.
+ */
+@media print {
+  .scope-nav, .diagrams-search, .diagrams-toolbar, .grid-status { display: none !important; }
+  /* Nothing on paper can be enlarged, and the labels line stays: it says
+   * how many categories the printed chart is NOT naming, which is exactly
+   * what a reader of the sheet cannot find out any other way. */
+  .chart-enlarge { display: none !important; }
+  .chart-canvas { height: 60mm; }
+  /* A BAND CHART PRINTS AS A CHART, not as a scrolling box. On screen its
+     canvas may be wider than the page and the box scrolls sideways; a sheet
+     of paper cannot scroll, and the half of the picture past the right edge
+     would simply be missing. It is drawn to the width of the sheet instead
+     and the label rule decides what fits there, exactly as it does for every
+     other printed chart. */
+  .chart-card--band .chart-canvas { overflow: visible !important; }
+  .chart-wide { width: 100% !important; }
+  .chart-table > summary { display: none; }
+
+  /* PAPER CANNOT SCROLL, so the two-row table of toggles wraps here
+   * instead. On screen the row of them is a table with two rows and a
+   * scrollbar where the card is too narrow; on a sheet a scrollbar hides
+   * the series that fall off the right-hand edge, which is the one thing a
+   * key may not do. */
+  .chart-legend .legend-list {
+    overflow: visible !important;
+    grid-auto-flow: row;
+    grid-template-rows: none;
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  }
+
+  /* The legend PRINTS. Hiding the toggle would hide the swatch and the
+   * series name with it - both live inside that button - so paper would
+   * carry bars in seven colours and an empty box where the key should be. It is
+   * flattened instead: no border, no background, nothing that looks like
+   * something to press on a sheet of paper. */
+  .chart-legend .legend-toggle {
+    border: 0;
+    background: none;
+    padding: 0;
+    min-height: 0;
+    cursor: auto;
+  }
+
+  /* Paper cannot scroll. The numbers table sits in a `.table-scroll` box
+   * that is the right answer on screen and clips three columns off the
+   * right edge of the sheet; here it grows instead, and a fixed layout with
+   * wrapping words fits six columns into the width of the card. */
+  .chart-table .table-scroll {
+    overflow: visible !important;
+    max-width: none !important;
+  }
+  /* `.chart-table .chart-data-table`, not `.chart-data-table`: the screen
+   * rule above (`.chart-table .table`) is two classes deep and would win
+   * over a single class here, and the table would print at the body's
+   * 11 pt - which is exactly what does not fit. */
+  /* `table-layout: auto`, deliberately: fixed shares the width equally
+   * whatever is in a column, so a column of category NAMES got the same
+   * space as a column of two-digit counts and broke words across lines
+   * ("Maintenanc e", "filings.example.o rg"). Auto measures the content
+   * first, which is the whole point on a sheet that cannot scroll; the
+   * wrapping below keeps a six-column table inside the card anyway. */
+  .chart-table .chart-data-table {
+    table-layout: auto;
+    width: 100% !important;
+    font-size: 8pt;
+  }
+  /* app.css keeps a header on one line, which is right on screen (the box
+   * scrolls) and wrong here: five importance levels then run into each
+   * other across their own borders. On paper they wrap. */
+  .chart-table .chart-data-table th,
+  .chart-table .chart-data-table td {
+    white-space: normal;
+    overflow-wrap: break-word;
+    padding: 1pt 3pt;
+  }
+
+  /* Nothing sticks to the top of a sheet of paper: the counter and the
+   * table's header print where they stand, once, at the top of the rows
+   * they belong to. */
+  .drilldown-count, .drilldown-table thead th { position: static !important; }
+  /* The free text prints in full - the reader of a sheet cannot press the
+   * control that would have opened it. */
+  .dd-text.is-clamped { display: block; overflow: visible; }
+  .dd-more { display: none !important; }
+}
+
+/* ── The map under the charts ─────────────────────────────────────────────
+ *
+ * A card of its own, below the grid rather than inside it: it is one picture
+ * of the whole tab, not a ninth chart, and a grid cell would give it half a
+ * screen on a wide window and a different half on the next one.
+ *
+ * `--gap` above it and nothing below: the grid's own gap does not reach
+ * across the end of the grid, so without this the map sat flush against the
+ * last row of charts. Nothing here reserves height - the card is [hidden] on
+ * the six tabs that have no map, and hidden is display:none (app.css), so
+ * those pages end where their charts end.
+ *
+ * The map itself is `.minimap` (views.css), the same box the Query page
+ * draws: one size of small map in the product, with the stacking context
+ * that keeps Leaflet's panes inside their card. */
+.diagrams-map-card { min-width: 0; }
+/* THE GRID'S OWN GAP AND NOTHING ON TOP OF IT. The card carried a margin from
+ * the days it stood alone under the charts; in the grid that margin ADDED to
+ * the row gap, so the map had 32 px above it and 16 below - and a matrix that
+ * had the same 16 px as every other card read as stuck to the map's bottom
+ * edge. The margin is for the one place the card is not a cell of the grid:
+ * parked in the summary section while its tab has no map. */
+#chart-summary > .diagrams-map-card { margin-top: var(--gap); }
+/* THE CARD WITHOUT ITS MAP. The tab found rows and the archive has no point
+ * on the world for any of them: an empty 26 rem square says less than the
+ * one sentence under it does (static/js/diagrams.js: sayNoPlaces). */
+.diagrams-map-card--unplaced .minimap { display: none; }
+.diagrams-map-card--unplaced .minimap-caption { margin-top: 0; }
+/* Under the charts a map is worth more height than beside a form: it is the
+ * only picture on the card and there is nothing to the right of it.
+ *
+ * TALL. At a full page width the card is 1366 px across, and a picture that
+ * wide and 416 px tall would be a strip: the world fits across it twice over
+ * and every field on it is flattened into a band. The map is the one thing
+ * on this card, so it gets the height the picture needs. */
+.diagrams-map-card .minimap { height: 39rem; }
+@media (max-width: 40rem) {
+  .diagrams-map-card .minimap { height: 30rem; }
+}
+/* THE LINE ABOUT THE PICTURE GOES UNDER THE PICTURE (app.css, THE SHAPE OF
+ * A PAGE). It says what was drawn and what was left out, and it changes
+ * length between tabs and periods - above the map, every one of those
+ * changes would move the map under the reader's pointer. */
+.diagrams-map-card .minimap-caption { margin-top: 0.5rem; }
+
+/* Nothing of the map is printed: the tiles are fetched images that a print
+ * stylesheet cannot wait for, and a half-drawn world under a chart is worse
+ * than no world at all. The caption stays, so the sheet still says what the
+ * map would have shown. */
+@media print {
+  .diagrams-map-card .minimap { display: none; }
+  .diagrams-map-card #diagrams-map-open { display: none; }
+}
+
+/* THE BANNER UNDER THE BUTTONS NEEDS AIR ABOVE IT.
+ *
+ * "'Apple Inc. (Company)' (entity) - 2 entities." sat flush against Search
+ * and Clear, so the row of controls and the sentence about what they found
+ * read as one block - and the sentence looked like a label belonging to the
+ * button beside it. Half a gap is enough to say they are two things; a
+ * whole one would push the first chart further down a page that is already
+ * fighting for the fold. */
+#diagrams-resolved:not([hidden]) { margin-top: 0.5rem; }
+
+/* THE ⓘ BESIDE THE TWO STRIP LABELS.
+ *
+ * "About:" and "Charts:" are two rows of buttons that look alike, and two of
+ * the words on them are the same ("Market Insights", "Events") - so a reader
+ * meeting the page has no way to tell which strip changes what. One sentence
+ * each, on hover and in the accessible name, and it costs no height: the
+ * mark is the size of the label beside it. */
+.strip-hint {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 1.125rem;
+  height: 1.125rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-style: italic;
+  font-weight: 700;
+  line-height: 1;
+  cursor: help;
+}
+.strip-hint:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

@@ -1,0 +1,252 @@
+{#- Heatmap: where the archive's addresses cluster.
+
+    One question, one answer: how many locations sit in each small square of
+    the world. The grid is the server's (three decimals, about 110 m) and the
+    counts are painted as a HEAT FIELD - a smooth wash from yellow through
+    orange to red that melts neighbouring squares into an area, which is what
+    a heat map is for. The key beside the map is sampled from that very
+    gradient (static/js/heatmap.js: heatColour), so the two cannot drift
+    apart.
+
+    A field cannot carry a number, so the exact reading stays where it was:
+    the list beside the map names every busy square and counts it, and a
+    click on the map opens the same reading for the square under the pointer
+    - and, under it, WHO is standing there: the drilldown dialog every other
+    view opens, listing the entities in that spot with the most locations
+    first (static/js/heatmap.js: openSpot).
+
+    "Heat radius" is how wide one location's contribution is drawn. "Fit to
+    data" and "Only the visible area" are the two ways to move over the same
+    answer.
+
+    THE SEARCH BOX ASKS FOR A PLACE, because a place is what this view
+    counts. Every box in the dashboard searches the thing its own view is
+    about - an entity on the Map and the Graph, an event type on Events - and
+    a box here that asked for an entity would be answering the Map's question
+    on the Heatmap's page. Without one, the only way to ask about a corner of
+    the world is to drag a map, which is the gesture that is hardest for the
+    readers NN/g's older-users work is about; with one, "Springfield" and
+    "USA" are typed, and the answer names what it counted (see the header of
+    app/routers/api_map.py for how the name is read).
+
+    THE ENTITY BOX IS A SECOND AXIS BESIDE IT, NOT INSTEAD OF IT. The old
+    dashboard's heat view searched entities and had no place box at all, so
+    "where does this archive cluster in the Netherlands" could not be asked;
+    this one takes both and ANDs them, so "Apple's addresses in Rotterdam" is
+    one question with one answer.
+
+    AND THAT ENTITY BOX ITSELF READS ITS TERM TWO WAYS, with the Object /
+    Type switch the Diagrams pages and the Map have: as ONE entity or
+    bucket, or as an EVENT TYPE, which counts the addresses of every entity
+    the events of that kind are about ("where does a Product launch
+    happen"). The place box keeps its own meaning - it is a place, and a
+    place has no second axis here: the location TYPES are a checklist beside
+    the map already, and one question must not have two controls.
+-#}
+{% extends "_layout.html" %}
+{% from "_macros.html" import typeahead, search_actions %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ static('vendor/leaflet/leaflet.css') }}">
+<link rel="stylesheet" href="{{ static('css/views.css') }}">
+<link rel="stylesheet" href="{{ static('css/map.css') }}">
+{#- The drilldown dialog: a click on the field lists the entities in that
+    spot, in the same table the Diagrams charts and the Dashboard's bars
+    open (static/js/drilldown.js). The stylesheet is the table's, so this
+    view has to load it as those two do. -#}
+<link rel="stylesheet" href="{{ static('css/drilldown.css') }}">
+<meta name="tile-url" content="{{ request.app.state.cfg.tile_url if request.app.state.cfg is defined else '' }}">
+{% endblock %}
+
+{#- WHAT THE ENTITY FIELD ASKS FOR ON EACH AXIS: the label, the suggestion
+    list, the placeholder. static/js/heatmap.js holds the same table so the
+    switch can change the field without a round trip. -#}
+{%- set axis_fields = {
+      "object": ("Entity or bucket", "/api/suggest/entity_or_bucket", "Every entity"),
+      "type":   ("Event type", "/api/suggest/event_type", "Every event type"),
+   } -%}
+{%- set current_axis = 'type' if request.query_params.get('entity_axis') == 'type' else 'object' -%}
+{%- set entity_field = axis_fields[current_axis] -%}
+
+{% block content %}
+<div class="page-header">
+  <h1>Heatmap</h1>
+  <details class="page-about">
+    <summary>About this page</summary>
+    <div class="page-about-body">
+      <p class="page-purpose">Where the addresses in this project cluster, counted on a grid of about 110 metres and painted as a heat field. Name a place to count only there.</p>
+      <p>The place field takes a city, a country or an address from the archive itself. The entity field narrows the same count; the two are used together.</p>
+      <p>The entity field reads its term two ways. <strong>Object</strong> is one entity or one bucket. <strong>Type</strong> is an event type: the addresses counted are those of every entity the events of that kind are about.</p>
+      <p>From and To count only the locations the archive dates inside that range. The end date is included.</p>
+      <p>Heat radius is how wide one location is painted. With <em>Only the visible area</em> ticked, panning the map counts again.</p>
+      <p>The busiest spots are listed beside the map with their counts. A click on the map, or on one of those rows, reads out the spot and opens what is inside it: the entities standing there, the ones with the most locations first, a bucket as one row under its own name. The list loads more as you scroll it.</p>
+      <p>A spot is a cell of a grid of about 110 metres - what is drawn is a soft field, so nothing on the map has a straight edge.</p>
+      <p>Scrolling over the map zooms it; the + and − buttons do the same.</p>
+    </div>
+  </details>
+</div>
+
+{#- ONE TOOLBAR, ONE RULE (see the header of static/css/map.css).
+    Every control in a row is 44 px tall with its label directly above it,
+    and a group without a label keeps the label row all the same, so nothing
+    floats up and sits higher than its neighbours. The order is the same on
+    every view: what is searched, then how it is narrowed, then the action. -#}
+<form class="filter-card map-controls" id="heat-form" novalidate data-entity-axis="{{ current_axis }}">
+  <div class="toolbar map-toolbar">
+    {#- ONE FIELD, TWO QUESTIONS - the same switch, in the same markup and
+        with the same words, as the Diagrams pages and the Map. It sits in
+        front of the field it governs, never in front of the place box: the
+        place is a place on either axis. -#}
+    <div class="field field--fixed axis-field">
+      <span class="field-label" id="heat-axis-label">Search by</span>
+      <div class="segmented" role="group" aria-labelledby="heat-axis-label" data-axis-switch>
+        <button type="button" class="button button--secondary" data-axis="object"
+                aria-pressed="{{ 'true' if current_axis == 'object' else 'false' }}"
+                title="One thing: an entity or a bucket">Entity</button>
+        <button type="button" class="button button--secondary" data-axis="type"
+                aria-pressed="{{ 'true' if current_axis == 'type' else 'false' }}"
+                title="A whole class: an event type">Event type</button>
+      </div>
+    </div>
+
+    {#- The second axis. It is a separate field and not a mode switch: both
+        are true at once, and "Apple in Rotterdam" is the question this view
+        could not answer before. -#}
+    {{ typeahead("entity", label=entity_field[0],
+                 suggest_url=entity_field[1],
+                 placeholder=entity_field[2],
+                 empty_label="- every entity -",
+                 limit=8) }}
+
+    {#- THE PLACE COMES AFTER WHAT IS SEARCHED, not before it. The switch in
+        front of the entity field governs THAT field, and with the place box
+        first the switch would stand between two fields and read as if it
+        governed the place - which it does not: a place is a place on either
+        axis. The order is the same sentence the other views make: what is
+        searched, then where, then when. -#}
+    {{ typeahead("q", label="Place",
+                 suggest_url="/api/suggest/place",
+                 placeholder="Every place",
+                 empty_label="- every place -") }}
+
+    <div class="field field--fixed field--date">
+      <label class="field-label" for="heat-from">From</label>
+      <input type="date" id="heat-from" name="date_from">
+    </div>
+    <div class="field field--fixed field--date">
+      <label class="field-label" for="heat-to">To</label>
+      <input type="date" id="heat-to" name="date_to">
+    </div>
+
+    {#- The caption of the slider sits ABOVE it, like every other field on
+        this toolbar, rather than beside it: a label beside one control and
+        above another in the same row is exactly the unevenness the toolbar
+        rule exists to end. -#}
+    <div class="field field--fixed field--tight">
+      <label class="field-label" for="heat-radius">Heat radius</label>
+      <div class="heat-slider">
+        <input type="range" id="heat-radius" min="10" max="60" step="2" value="30">
+        <output for="heat-radius" id="heat-radius-value">30 px</output>
+      </div>
+      {#- What the slider does: About disclosure, top of the page. -#}
+    </div>
+
+    <div class="field field--fixed field--tight">
+      <span class="field-label" id="heat-area-label">Area</span>
+      <div class="row" role="group" aria-labelledby="heat-area-label">
+        <button type="button" class="button button--secondary" id="heat-fit">Fit to data</button>
+        <label class="check"><input type="checkbox" id="heat-visible-only"> Only the visible area</label>
+      </div>
+      {#- What the tick box does: About disclosure, top of the page. -#}
+    </div>
+
+  </div>
+  {#- SAVE IMAGE IS ON THE MAP NOW, as a control in its top right corner
+      beside the zoom buttons (static/js/mapimage.js: addSaveControl says
+      why). The row under the fields is left holding the two things that
+      ask a question, which is what it holds on every other view. -#}
+  {{ search_actions(id="heat-search") }}
+</form>
+
+<div class="map-layout">
+  <div class="map-root" id="heat-root">
+    <div class="map-canvas" id="heat-map" role="region" tabindex="0"
+         aria-label="Heat field of the archived addresses. The busiest spots are listed beside it with their counts."></div>
+    {#- EVERY LINE ABOUT THE PICTURE GOES UNDER THE PICTURE.
+        One rule, both map views: a line above a map moves the map down by
+        its own height, and all three of these come and go - the status
+        appears while a request runs and grows to two lines on a warning,
+        the retry button appears only after a failure, and the caption grows
+        to two lines as soon as a search has run. Above the canvas, each of
+        them shifted the map while somebody was reading why; on a 768 px
+        screen the bottom of the picture went past the fold.
+
+        They stay inside .map-root, so they travel with the sticky map and a
+        reader who activates a row far down the list still sees them. -#}
+    <p class="map-status" id="heat-status" aria-live="polite">Loading the grid…</p>
+    <p class="map-retry no-print" id="heat-retry" hidden>
+      <button type="button" class="button" id="heat-retry-button">Try again</button>
+    </p>
+    <p class="map-caption" id="heat-caption"></p>
+  </div>
+
+  <aside class="map-side" aria-label="Scale and lists">
+    {#- THE KEY IS SAMPLED FROM THE GRADIENT THE FIELD IS PAINTED WITH.
+        Every row's swatch is the colour heatColour() returns for that count,
+        and the field asks the same function for the same colour - one
+        function, so the key cannot promise a colour the canvas never paints.
+        (A bar of CSS stops beside a canvas painted by another rule is how
+        the two drifted apart before.) -#}
+    <section class="card" aria-labelledby="heat-scale-title">
+      <h2 class="card-title" id="heat-scale-title">Locations per spot</h2>
+      <ul class="heat-steps" id="heat-steps">
+        <li class="empty">Nothing counted yet.</li>
+      </ul>
+      <p class="field-help" id="heat-scale-note"></p>
+    </section>
+
+    {#- THE CHECKLIST GROWS WITH THE ARCHIVE, so it gets two controls: a box
+        that narrows the list to what is typed, and a way to clear every tick in
+        one gesture rather than sixty. "No types" is not the same request as
+        "every type" - it counts nothing, and the map says so. -#}
+    <section class="card" id="heat-types-card" hidden>
+      <div class="card-header">
+        <h2 class="card-title" id="heat-types-title">Location types</h2>
+        <span class="card-meta" id="heat-types-count"></span>
+      </div>
+      <div class="type-tools">
+        <div class="field type-find">
+          <label class="field-label" for="heat-types-find">Find a type</label>
+          <input type="search" id="heat-types-find" placeholder="Every type"
+                 autocomplete="off" spellcheck="false">
+        </div>
+        <div class="field field--fixed">
+          <span class="field-label" aria-hidden="true"></span>
+          <div class="row" role="group" aria-labelledby="heat-types-title">
+            <button type="button" class="button button--quiet" id="heat-types-all">All types</button>
+            <button type="button" class="button button--quiet" id="heat-types-none">No types</button>
+          </div>
+        </div>
+      </div>
+      <ul class="type-list" id="heat-types"></ul>
+      <p class="field-help" id="heat-types-note"></p>
+    </section>
+
+    <section class="card" aria-labelledby="heat-top-title">
+      <div class="card-header">
+        <h2 class="card-title" id="heat-top-title">Busiest spots</h2>
+        <span class="card-meta" id="heat-top-count"></span>
+      </div>
+      <ul class="map-list" id="heat-top">
+        <li class="empty">Nothing counted yet.</li>
+      </ul>
+    </section>
+  </aside>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ static('vendor/leaflet/leaflet.js') }}"></script>
+<script src="{{ static('vendor/leaflet.heat/leaflet-heat.js') }}"></script>
+<script type="module" src="{{ static('js/heatmap.js') }}"></script>
+{% endblock %}

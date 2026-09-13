@@ -1,0 +1,195 @@
+{#- Graph: one entity in the middle, its connections around it.
+
+    The page is a grid and the legend is a CELL of it - the toolbar spans
+    the top row, the drawing sits at (2,1), the legend and the detail panel
+    stack in the right column. Nothing is positioned over anything else;
+    the only absolutely positioned thing on the page is the suggestion list
+    of the search field, which lives in the toolbar row and can therefore
+    only touch the top edge of the drawing. static/css/graph.css draws the
+    picture of that, and tests/ui/test_graph_legend_no_overlap.py measures it.
+
+    Progressive disclosure (Cambridge Intelligence's graph-UX guidance): the
+    search draws one ring, a click on a node draws that node's own ring
+    around it, and the view PANS to keep what was clicked in place instead
+    of re-fitting - a graph that jumps after every click is a graph nobody
+    can follow.
+
+    Everything a mouse can do, a keyboard can do: nodes and connections are
+    focusable, Enter expands or selects, the zoom and reset buttons do what
+    the wheel and the drag do.
+-#}
+{% extends "_layout.html" %}
+{% from "_macros.html" import typeahead, search_actions %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ static('css/views.css') }}">
+<link rel="stylesheet" href="{{ static('css/graph.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Connection graph</h1>
+  <details class="page-about">
+    <summary>About this page</summary>
+    <div class="page-about-body">
+      <p class="page-purpose">One entity in the middle and what it is connected to. Click a node to draw its own connections around it.</p>
+      <p>A bucket name starts from every member at once.</p>
+      <p>Clicking a node that is already open closes it again: everything that hangs only from it goes, and anything a second open node reaches stays. The sentence above the drawing says how many of each.</p>
+      <p>A node can be dragged where you want it and stays there. A dragged node is pinned until you drag it again or press Reset, which also fits the whole graph. With a node focused, the arrow keys move it and Enter opens or closes it.</p>
+      <p>From and To draw only the connections the archive dates inside that range. The end date is included.</p>
+    </div>
+  </details>
+</div>
+
+<div id="graph-root">
+  {#- ONE TOOLBAR, ONE RULE (see the header of static/css/map.css, which
+      writes it down for all three map-like views). Every control in the row
+      is 44 px tall with its label directly above it; a group without a label
+      keeps the label row all the same, so the button and the zoom group
+      cannot float up and sit higher than the search field. The order is the
+      one every view uses: what is searched, then how it is narrowed, then
+      the action. -#}
+  <form class="filter-card toolbar graph-toolbar" id="graph-form" novalidate>
+    {#- NO HINT LINE: what a bucket does is in the About disclosure.
+
+        THE SAME PLACEHOLDER GRAMMAR AS EVERY OTHER SEARCH BOX in the
+        product - Diagrams uses this very sentence. A sample value ("Apple")
+        cannot be told apart from a set one here: this field shows what IS
+        set AS its placeholder, so a word that looks like a value is a field
+        that looks answered while it is empty. -#}
+    {{ typeahead("q", label="Entity or bucket",
+                 suggest_url="/api/suggest/entity_or_bucket",
+                 placeholder="Search for an entity or bucket",
+                 empty_label="- clear the search -") }}
+
+    {#- THE DATE RANGE. It filters the connections by the date the archive
+        gives them, so "who was this connected to last year" is answerable;
+        the empty state says so
+        when a range is what emptied the drawing. -#}
+    <div class="field field--fixed field--date">
+      <label class="field-label" for="graph-from">From</label>
+      <input type="date" id="graph-from" name="date_from">
+    </div>
+    <div class="field field--fixed field--date">
+      <label class="field-label" for="graph-to">To</label>
+      <input type="date" id="graph-to" name="date_to">
+    </div>
+
+    <div class="field field--fixed">
+      <span class="field-label" id="graph-view-label">View</span>
+      <div class="graph-zoom row" role="group" aria-labelledby="graph-view-label">
+        <button type="button" class="button button--secondary" id="graph-zoom-in" aria-label="Zoom in">+</button>
+        <button type="button" class="button button--secondary" id="graph-zoom-out" aria-label="Zoom out">−</button>
+        {#- "Reset", not "Fit": it fits the whole graph AND lets go of every
+            node that was dragged into place, and a control that quietly
+            undoes somebody's arrangement under the word "Fit" is a control
+            nobody can predict. -#}
+        <button type="button" class="button button--secondary" id="graph-reset"
+                title="Fit the whole graph and let go of every node you dragged">Reset</button>
+      </div>
+    </div>
+    {{ search_actions(id="graph-search") }}
+</form>
+
+  <div class="graph-canvas-cell">
+    {#- What the TERM became, which is not what the summary line says: the
+        summary counts what is drawn, this says that "Apple Inc." was
+        answered with the whole bucket "Apple" and offers the single entity
+        beside it (static/js/resolved.js). It is deliberately NOT inside the
+        aria-live summary: that line is rewritten on every expansion, and a
+        button in it would be read out again each time. -#}
+    <div class="graph-canvas" id="graph-canvas">
+      <p class="graph-empty" id="graph-empty">Search for an entity above to draw its connections.</p>
+    </div>
+    {#- EVERY LINE ABOUT THE DRAWING GOES UNDER THE DRAWING - the rule the
+        two map views follow, and for the reason this block had to move:
+        above the canvas the summary had to RESERVE three lines of
+        height (graph.css) so the picture would not jump when it filled,
+        which meant 78 px of nothing between the form and the drawing before
+        anybody had searched at all. The drawing began a long way below the
+        colour key beside it, with no visible reason.
+
+        Under it, a line that appears pushes only what is under it and the
+        canvas never moves - so nothing has to be reserved, and the space is
+        there only when there are words in it. -#}
+    <p class="notice notice--warn notice--tight" id="graph-resolved" hidden></p>
+    <p class="graph-summary" id="graph-summary" aria-live="polite"></p>
+    {#- HOW MANY NODES ARE HELD WHERE SOMEBODY PUT THEM. A pin is state, and
+        state that is not shown is state a reader cannot undo: this line says
+        how many are pinned and names the control that lets them go. It is
+        outside the aria-live summary on purpose - that line is rewritten on
+        every expansion, and this one changes for a different reason. -#}
+    <p class="graph-pinned" id="graph-pinned" hidden></p>
+    {#- HOW MANY NAMES THE DRAWING COULD NOT PRINT. A crowded chart card says
+        "43 entities - open the chart to see the names" (static/js/charts.js,
+        hiddenLabelsLine) and the drawing owes a reader the same sentence: a
+        picture that has quietly stopped labelling itself is worse than one
+        that never did. It appears only when something IS hidden - an empty
+        row would be a line about nothing - and every name it stands for is
+        still in the bubble's tooltip, in its aria-label and in the panel
+        beside the drawing. -#}
+    <p class="graph-labels" id="graph-labels-note" hidden></p>
+  </div>
+
+  <div class="graph-side">
+    <div id="graph-legend"></div>
+
+    {#- The drawing carries four codes and the legend above decodes only the
+        colours. The number in a bubble, the dashed ring, the "+" and the
+        bowed dashed line were explained in the aria-labels and nowhere a
+        sighted reader could see - a symbol the key does not decode is
+        decoration (Cambridge Intelligence on graph legends). Each row draws
+        the glyph it explains, and graph.css gives the key and the drawing
+        their shape in ONE rule each, so the two cannot drift. The key uses
+        class names of its own all the same: `.g-node` and `.g-edge` are how
+        the tests find the graph, and a picture of a node in a card must not
+        answer to the same selector as a node. -#}
+    {#- A DISCLOSURE, NOT A PANEL. The four glyphs answer a question that is
+        asked once - "why is that ring dashed?" - and until it is asked they
+        are a second key under the colour key, on a page whose subject is the
+        drawing. Closed it is one line; the rows and their wording are
+        unchanged inside it, and they are still in the document for a screen
+        reader and for find-in-page. -#}
+    <details class="card graph-key">
+      <summary id="graph-key-title">What the shapes mean</summary>
+      <ul class="key-list">
+        <li>
+          <svg viewBox="0 0 44 32" class="key-glyph" aria-hidden="true" focusable="false">
+            <circle class="key-bubble" cx="22" cy="16" r="13" stroke="#1d4f91"></circle>
+            <text class="key-count" x="22" y="21" text-anchor="middle">2</text>
+          </svg>
+          <span>The number in a bubble is how many connections are drawn to it. The sentence above the drawing counts the same lines.</span>
+        </li>
+        <li>
+          <svg viewBox="0 0 44 32" class="key-glyph" aria-hidden="true" focusable="false">
+            <circle class="key-bubble key-bubble--open" cx="22" cy="13" r="11" stroke="#1d4f91"></circle>
+            <text class="key-plus" x="22" y="31" text-anchor="middle">+</text>
+          </svg>
+          <span>A dashed ring with a “+” is not opened yet. Click it, or press Enter on it, to draw its own connections.</span>
+        </li>
+        <li>
+          <svg viewBox="0 0 44 32" class="key-glyph" aria-hidden="true" focusable="false">
+            <circle class="key-bubble" cx="22" cy="16" r="11" stroke="#1d4f91"></circle>
+          </svg>
+          <span>A solid ring is already opened.</span>
+        </li>
+        <li>
+          <svg viewBox="0 0 44 32" class="key-glyph" aria-hidden="true" focusable="false">
+            <path class="key-line key-line--cross" d="M 3 24 Q 22 4 41 24" fill="none" stroke="#4d5b6a"></path>
+          </svg>
+          <span>A dashed line joins two entities that were both on the graph already.</span>
+        </li>
+      </ul>
+    </details>
+
+    <section class="card graph-detail" id="graph-detail" aria-labelledby="detail-title" tabindex="-1">
+      <h2 class="card-title" id="detail-title">Details</h2>
+      <p class="detail-empty" id="detail-body">Nothing selected. Click a node or a connection, or reach them with the Tab key.</p>
+    </section>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="{{ static('js/graph.js') }}"></script>
+{% endblock %}

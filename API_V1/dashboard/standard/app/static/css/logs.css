@@ -1,0 +1,490 @@
+/* ==========================================================================
+ *  The Log view. Loaded by templates/logs.html on top of app.css, which
+ *  owns the tokens, the cards, the table, the pager and the tab strip -
+ *  nothing here redefines any of them.
+ *
+ *  THE ONE RULE THIS FILE EXISTS FOR: severity is never carried by colour
+ *  alone. `.log-pill` always contains the word (Error / Warning / Test);
+ *  the colour and the left border of the row repeat what the word says, so
+ *  the log is as readable in greyscale, on a projector and to a colour-
+ *  blind reader as it is on the author's screen. WCAG 1.4.1.
+ *
+ *  A row is a block, not a table row: the message is a sentence of up to
+ *  two lines and the technical detail folds out underneath it. In a table
+ *  either the sentence is truncated or the columns are, and the sentence is
+ *  the point of the whole table.
+ *
+ *  THE SECOND RULE IS HEIGHT. A 1024x768 screen has about 600 px below the
+ *  top bar, and every line of chrome above the list costs a row of the log.
+ *  Hence: the filter card is one block of controls plus one line of help,
+ *  the panel header carries the "what is shown" sentence instead of giving
+ *  it a row of its own, and a row of the log is three lines - head,
+ *  message, and address plus disclosure sharing the last one.
+ * ========================================================================== */
+
+/* ── Filters ──────────────────────────────────────────────────────────── */
+
+/* `main` is a grid with a gap of its own (app.css), so NOTHING here adds a
+ * margin between the blocks: every margin-bottom set here would be added
+ * to that gap, and four of them would push the first row of the log a full
+ * row further down. */
+.log-page-header { margin-bottom: 0; }
+/* The purpose sentence beside the heading rather than under it - it is one
+ * line either way, and on a 1024x768 screen a line above the list is a line
+ * of the log that cannot be read. It still wraps to its own line when the
+ * window is too narrow for both. */
+.log-page-header .page-purpose { flex-basis: auto; }
+/* One step down from the shared h1: the word "Log" needs no 35 px, and the
+ * height goes to the rows. */
+.log-page-header h1 { font-size: 1.625rem; }
+
+/* THE LOG BUYS ITS AIR BACK.
+ *
+ * app.css gives every view a 1.5 rem gap between its blocks and 1.25 rem
+ * inside every panel - room to breathe around forms without borders. This
+ * one view cannot afford it: on a 1024x768 screen everything above the
+ * first problem is chrome, and those two values together are 28 px, which
+ * is exactly one row of the log. The rule of this file is that nothing
+ * above the list may cost a row - so the Log keeps the tighter spacing and
+ * says why.
+ * tests/ui/test_logs_view.py::test_two_rows_of_the_log_are_readable_without_scrolling
+ * is the measurement. */
+body[data-view="logs"] .main { gap: var(--gap); }
+.log-panel { padding: var(--gap); }
+
+/* THE LOG SPENDS EVERY PIXEL ABOVE THE LIST, and the query row is subject
+ * to that like everything else here: it keeps its place, its wording and
+ * its shape - the same row as on every other view - and gives up the space
+ * around it. The row costs 44 px of button; the gap above it and the card's
+ * own padding below it are what it can hand back.
+ *
+ * MEASURED, because two whole rows have to be readable at 1024x768 without
+ * scrolling and tests/ui/test_logs_view.py counts them: with the row added
+ * at the full gap the second row ended at 772 px against a 768 px fold and
+ * the test caught it. A log row is 119 px tall, so this is not a rounding
+ * question - it is one whole row of the log nobody would have read. */
+.log-filters .query-actions[data-search-actions] { margin-top: 0.25rem; }
+
+.log-filters {
+  margin-bottom: 0;
+  padding: 0.5rem var(--gap) 0.125rem;
+}
+
+/* THE TITLE, THE DISCLOSURE AND THE TWO HEARTBEATS ON ONE LINE. `.page-about`
+ * takes `flex-basis: 100%` everywhere else, and a line of its own is right on
+ * a page whose heading is a sentence long. Here the heading is the word "Log",
+ * the pills are already on that line, and the 40 px the disclosure took under
+ * it is a third of a row of the log - which is the measure this page is tuned
+ * against. */
+.log-page-header .page-about { flex-basis: auto; }
+
+/* The layout is app.css's `.toolbar` (top-aligned, one label row, an
+ * unlabelled cell given that row as a margin); this row only tightens the
+ * gap between a label and its control, because on the Log every pixel
+ * above the list is a row of the log nobody reads. --label-gap rather than
+ * a `gap` of its own: the margin that puts the buttons on the control
+ * baseline is computed from it. */
+.log-filter-row { --label-gap: 0.125rem; }
+/* The bases are what keeps the five controls on ONE line on a 1024 px
+ * screen (a second line of labelled fields costs 26 px, a fifth of a row of
+ * the log) while every select still fits its longest label: a <select> cuts
+ * its text off mid-word without a hint that it did, and "Every severit" is
+ * not a word. The ellipsis below is the safety net for a font that measures
+ * wider than the one this was tuned on. */
+.log-filter-row .field { flex: 1 1 10.5rem; min-width: 8.5rem; }
+.log-filter-row .field:first-child { flex: 1.2 1 11.5rem; }
+.log-filter-row select { text-overflow: ellipsis; }
+/* Twice the share of a select, so the field a term is typed into is the
+ * widest control in the row - with a basis small enough to stay on that
+ * one line. */
+.log-filter-row .log-search { flex: 2 1 13rem; }
+/* The buttons are as wide as their words, on the same line as the controls
+ * - a "Show" that stretches over a fifth of the row reads as a banner.
+ *
+ * AND THEY BOTTOM-ALIGN INSTEAD OF CARRYING AN EMPTY LABEL ROW. app.css
+ * gives a cell with no label of its own the label row as a top margin, so
+ * that it lands on the control baseline; here that margin is 26 px of
+ * nothing whenever the pair wraps onto a line by itself - which it does at
+ * 1024 px as soon as "Clear filters" is in the page - and 26 px is a row of
+ * the log the reader does not get (tests/ui/test_logs_view.py: two whole
+ * rows above the fold at 1024x768). `align-self: flex-end` puts the buttons
+ * on exactly the same baseline while they share a line with the fields, and
+ * costs nothing when they do not.
+ *
+ * It is safe HERE and is not the general rule, because it aligns to the
+ * BOTTOM of the line: it would sit below the control line the moment one
+ * cell of this row carried a hint under its control. No cell here does, and
+ * the help sentence for the search is a line of its own under the row. */
+.log-filter-row .log-actions {
+  flex: 0 0 auto;
+  flex-direction: row;
+  gap: 0.5rem;
+  margin-top: 0;
+  align-self: flex-end;
+}
+.log-actions .button { min-width: 6rem; }
+
+/* The help sentence is in the page at all times.
+ *
+ * Not hidden and revealed on :focus-within, to save the line for a row of
+ * the log - that costs the reader the first click of every sequence: the
+ * moment a control takes focus the card grows by 30 px, and when the
+ * pointer goes down on a row, a tab or a link below it the field blurs,
+ * the card collapses, the target moves up and the mouseup lands on
+ * nothing. A link that does nothing when it is clicked reads as broken.
+ * NOTHING ABOVE THE LIST MAY MOVE WHILE THE LIST IS BEING USED, so the line
+ * is simply there - one line, paid for once, for everybody. */
+.log-filters .field-help {
+  display: block;
+  margin: 0.4rem 0 0;
+  max-width: 100ch;
+}
+
+/* Only shown while something in the address had to be ignored. */
+.log-notice { margin: 0; }
+
+/* ── The tab strip ────────────────────────────────────────────────────── */
+
+.tabs { margin-bottom: 0; }
+.tab-count {
+  display: inline-block;
+  margin-left: 0.35rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.tab-count:empty { display: none; }
+[role="tab"][aria-selected="true"] .tab-count { background: var(--accent-tint); color: var(--accent-strong); }
+
+.log-panel { margin-bottom: 0; padding-top: 0.625rem; }
+/* The tab strip above already names the panel; its heading repeats the name
+ * for a reader who arrives by link or by screen reader, and the count and
+ * the filter sentence sit beside it on the same line. */
+.log-panel .card-header { margin-bottom: 0.25rem; }
+.log-panel .card-title { font-size: 1rem; }
+.log-panel .card-title:focus-visible { outline-offset: 4px; }
+
+/* ── One row of the log ───────────────────────────────────────────────── */
+
+.log-list { margin: 0; padding: 0; list-style: none; }
+
+.log-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.15rem;
+  /* 44 px is the floor for a row somebody has to hit with a mouse that
+   * shakes; three lines of text take it well past that. */
+  padding: 0.4rem 0.5rem 0.4rem 0.6rem;
+  border-top: 1px solid var(--line-soft);
+  border-left: 4px solid var(--line-soft);
+}
+.log-row:first-child { border-top: 0; }
+.log-row:target, .log-row:focus-within { background: var(--accent-tint); }
+
+/* The colour of the left edge repeats the pill's word; it never replaces it. */
+.log-row[data-severity="error"]   { border-left-color: var(--error); }
+.log-row[data-severity="warning"] { border-left-color: var(--warn); }
+.log-row[data-severity="info"]    { border-left-color: var(--accent); }
+
+.log-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15rem 0.6rem;
+}
+.log-time {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* "11 min ago" ON THE PAGE, next to the exact stamp - not in the title
+ * attribute, where a touch screen, a keyboard and every reader who does
+ * not hover never sees it - and "how long ago" is the first thing anybody
+ * asks of a log. */
+.log-ago { color: var(--muted); white-space: nowrap; }
+.log-head .log-ago { margin-left: -0.45rem; }
+.log-head .log-ago::before { content: "-\00a0"; }
+.log-kind { font-weight: 650; }
+.log-source { font-weight: 500; }
+/* A watched page that has been deleted since the row was written. It is not
+ * a link - there is nothing to open - and it says so in a word rather than
+ * only in a colour (WCAG 1.4.1). The name keeps its weight so the row still
+ * reads as "this happened to THAT page". */
+.log-source--gone { color: var(--muted); }
+.log-gone { font-weight: 400; font-style: italic; }
+.log-host, .log-uri {
+  color: var(--muted);
+  font-family: var(--mono);
+  /* An address can be longer than the row; it wraps rather than pushing the
+   * page sideways. */
+  overflow-wrap: anywhere;
+}
+.log-message { margin: 0; max-width: 90ch; }
+
+.log-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.05rem 0.55rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  line-height: 1.35;
+  /* The severity word is the carrier of the meaning (WCAG 1.4.1), so it is
+   * body size like everything else that has to be read - a pill is not a
+   * decoration here. */
+  font-weight: 650;
+  white-space: nowrap;
+}
+/* One meaning per colour across BOTH tabs: red is something that has to be
+ * dealt with, amber something to keep an eye on, blue a test somebody
+ * started, green a run that did its job, grey a run that correctly did
+ * nothing (robots.txt said no - that is the rule working, not a failure). */
+.log-pill--error   { color: var(--error); background: var(--error-tint); }
+.log-pill--warning { color: var(--warn);  background: var(--warn-tint); }
+.log-pill--info    { color: var(--accent-strong); background: var(--accent-tint); }
+.log-pill--done    { color: var(--ok); background: var(--ok-tint); }
+.log-pill--neutral { color: var(--muted); background: var(--surface-2); }
+
+/* ── The address and the technical half, on one line ──────────────────── */
+
+.log-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15rem 0.6rem;
+}
+.log-foot .log-detail { flex: 0 0 auto; }
+.log-foot .log-uri { flex: 1 1 20rem; min-width: 0; }
+/* Open, the block takes the whole width and moves BELOW the address: a
+ * traceback squeezed into the left half of a row is not readable, and the
+ * address belongs to the row rather than to the detail. */
+.log-foot .log-detail[open] { flex: 1 1 100%; order: 2; }
+
+.log-detail > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  /* 24 px is the WCAG 2.2 floor for a target (SC 2.5.8), and this is the
+   * smallest target on the page: it sits exactly on the floor rather than
+   * above it, because every pixel here is a pixel of the next row. */
+  min-height: 1.5rem;
+  margin-left: -0.4rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--radius);
+  color: var(--accent-strong);
+  cursor: pointer;
+  font-weight: 500;
+  list-style: none;
+}
+.log-detail > summary::-webkit-details-marker { display: none; }
+.log-detail > summary:hover { background: var(--accent-tint); }
+
+/* The affordance. Without a marker "Technical detail" reads as a link to
+ * another page: nothing on it says that it folds out, and nothing says
+ * whether it is open. The chevron points right when closed and down when
+ * open, so the state is visible as well as exposed to assistive software by
+ * <details> itself. */
+.log-marker {
+  flex: 0 0 auto;
+  width: 0.45em;
+  height: 0.45em;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+}
+.log-detail[open] > summary .log-marker { transform: rotate(45deg); }
+@media (prefers-reduced-motion: reduce) {
+  .log-marker { transition: none; }
+}
+
+.log-detail pre {
+  margin: 0.35rem 0 0;
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text);
+  /* Body size, not the browser's 13 px default for <pre>: a robots rule or
+   * a traceback tail is text somebody has to read, and app.css puts the
+   * floor for that at 16 px. */
+  font-size: 1rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 22rem;
+  overflow: auto;
+}
+
+/* ── The runs table ───────────────────────────────────────────────────── */
+
+.log-runs-help { display: block; margin: 0 0 0.5rem; max-width: 100ch; }
+
+/* Ten columns, and the message is NOT one of them - see the template. As an
+ * eleventh column it made the table 1144 px wide in a 958 px box on a
+ * 1024x768 screen, where Chrome draws no scrollbar over a trackpad: the one
+ * sentence that says why a run was skipped was off the screen, out of reach
+ * of the keyboard, and its invisible wrapping made every row a different
+ * height. It is a second row under the run now.
+ *
+ * The floor is what keeps a squeezed table from breaking "_probe Flats
+ * Zurich" over three lines; below it .table-scroll does its job. */
+.log-runs { min-width: 40rem; }
+/* The name of a source is one thing, not three lines of one word each. */
+.log-runs td:nth-child(2) { min-width: 8.5rem; }
+/* The age under the stamp rather than beside it: the When column would
+ * otherwise be the widest in the table. */
+.log-runs td.log-time .log-ago { display: block; }
+/* "40 ms" and "1.2 s" are one word each: broken over two lines they read as
+ * two numbers. They cost nothing - the columns are as wide as their
+ * headings, which are longer. */
+.log-runs th.num, .log-runs td.num { white-space: nowrap; }
+/* A link in a cell is a target like any other, and the line box of a table
+ * cell is 22 px - one under the WCAG 2.2 floor of 24 (SC 2.5.8). The
+ * padding is what lifts it over, without changing the height of the row. */
+.log-runs td a { display: inline-block; padding-block: 0.15rem; }
+
+/* The run and its message are ONE thing: the line between them is dropped
+ * and the pair is separated from the next run instead. */
+.log-runs tr.log-run--noted > td { border-bottom: 0; padding-bottom: 0.15rem; }
+.log-runs tr.log-run-note > td {
+  padding-top: 0;
+  /* Level with the stamp above it, one line of the same block. */
+  padding-left: 0.625rem;
+  /* `anywhere` and not `break-word`: only this one lowers the cell's
+   * min-content width, and without that a long sentence in a cell spanning
+   * every column would widen the whole table and push the numbers out. */
+  overflow-wrap: anywhere;
+}
+.log-run-note .log-run-message { display: block; max-width: 90ch; }
+
+/* Narrower than this and the ten columns no longer fit a 1024 px card: the
+ * padding goes first, then the stamp is allowed to wrap. Both are cheaper
+ * than a sideways scroll, which is the last resort and not the first. */
+@media (max-width: 1180px) {
+  .log-runs th, .log-runs td { padding-left: 0.4rem; padding-right: 0.4rem; }
+  .log-runs td.log-time { white-space: normal; }
+  .log-runs tr.log-run-note > td { padding-left: 0.4rem; }
+}
+
+/* ── The sideways scroll of the runs table ────────────────────────────── */
+
+/* Below the floor above the box scrolls, and then it has to SAY so: without
+ * this a trackpad user sees no scrollbar, a keyboard user cannot reach the
+ * columns at all (the box holds links, so Chrome's focusable-scroller
+ * heuristic does not apply) and nothing on the screen hints that the table
+ * continues. logs.js sets the two data attributes and, while it scrolls,
+ * makes the box a focusable region with a name. */
+.table-scroll-wrap { position: relative; }
+.table-scroll-wrap::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 2rem;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  /* The same ink as the shared shadows (app.css --shadow-lg); a token of
+   * its own would be a token this file owns and app.css does not. */
+  background: linear-gradient(to right, rgba(20, 30, 50, 0), rgba(20, 30, 50, 0.22));
+}
+.table-scroll-wrap[data-scrollable="true"][data-at-end="false"]::after { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .table-scroll-wrap::after { transition: none; }
+}
+/* The focus ring belongs on the box, not somewhere inside it: it is the box
+ * that takes the focus and the box that scrolls. */
+.table-scroll:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }
+
+/* ── The two step streams ─────────────────────────────────────────────── */
+
+/* The line over the list, in the same place and the same shape as the runs
+ * table's - one sentence saying what the rows are and how long they are
+ * kept. It is a `<p class="field-help">`, so it is body size like everything
+ * else somebody has to read (app.css puts that floor at 16 px, `small`
+ * included) and it is grey rather than small.
+ *
+ * WHAT IT IS HERE FOR IS THE MARGINS. A browser gives a <p> 16 px above and
+ * 16 below by default, and on a 1024x768 screen 32 px above the list is more
+ * than a row of the log - the rule this whole file exists for. Zero above,
+ * half a gap below, and a measure so the sentence does not run the full
+ * width of a 1440 px card: exactly what `.log-runs-help` does, because it is
+ * the same sentence in the same position one panel over. */
+.log-steps-help { display: block; margin: 0 0 0.5rem; max-width: 100ch; }
+
+/* A STEP IS NOT A VERDICT, AND ITS EDGE MUST NOT LOOK LIKE ONE. A step is a
+ * `.log-row` like a problem is, so it arrives carrying the 4 px left edge
+ * that the Problems tab uses to repeat a severity word - red, amber or blue
+ * beside a pill that says Error, Warning or Test (the rule at the top of
+ * this file). A step carries no severity and no pill at all, so on a step
+ * that bar is a verdict with nothing behind it, and a screenful of them
+ * reads as a screenful of problems - which is the opposite of what the tab
+ * says: these rows are the normal work of a service somebody is watching.
+ *
+ * So the edge stays and gives up half its weight. It stays because the rows
+ * ARE a sequence and the edge is what makes each one a step rather than a
+ * paragraph in a wall of text; it halves because two pixels of the soft line
+ * is a rule down the side of a list, and four is a severity.
+ *
+ * The two pixels are handed straight back as padding. The four panels take
+ * turns in one place on the page, and a reader who switches from Problems to
+ * Crawler must not see the text jump two pixels sideways - a list that moves
+ * when the tab changes reads as a different page rather than another tab of
+ * the same one. */
+.log-step {
+  border-left-width: 2px;
+  border-left-color: var(--line-soft);
+  padding-left: calc(0.6rem + 2px);
+}
+
+/* ── Empty, failed and error states ───────────────────────────────────── */
+
+.log-empty {
+  padding: 1.25rem 0.5rem;
+  color: var(--text);
+}
+.log-empty h3 { margin: 0 0 0.35rem; font-size: 1.0625rem; }
+.log-empty p { margin: 0 0 0.5rem; max-width: 70ch; color: var(--muted); }
+.log-empty .button { margin-top: 0.25rem; }
+.log-empty code {
+  font-family: var(--mono);
+  background: var(--surface-2);
+  padding: 0.05rem 0.3rem;
+  border-radius: var(--radius);
+}
+/* A failed request is not an empty result: it is marked as loudly as a row
+ * of the log would be, in the place the rows would have been. */
+.log-failed {
+  border-left: 4px solid var(--error);
+  padding-left: 0.75rem;
+  background: var(--error-tint);
+  border-radius: var(--radius);
+}
+
+/* ── Print ────────────────────────────────────────────────────────────── */
+
+@media print {
+  /* print.css already drops navigation, tab strips and pagers. The filter
+   * controls are noise on paper; what was filtered for is printed as the
+   * panel's header line instead, which is the caption of the page. */
+  .log-filters { display: none !important; }
+  .log-panel .card-meta { color: #333 !important; }
+  /* A row must not be broken across two pages: half a sentence about a
+   * rejected domain is worse than a page break before it. */
+  .log-row { break-inside: avoid; border-left-width: 2px; }
+  /* A detail somebody opened before printing prints with its row; a closed
+   * one stays closed, which is what makes the printout the messages rather
+   * than the tracebacks. */
+  .log-detail pre { max-height: none; overflow: visible; }
+
+  /* Paper does not scroll: the box that carries the runs table sideways on
+   * screen would simply clip the last columns here. It opens up, the table
+   * gives up its floor, and a run stays with its message. */
+  .table-scroll { overflow: visible !important; }
+  .table-scroll-wrap::after { display: none; }
+  .log-runs { min-width: 0; }
+  .log-runs tr { break-inside: avoid; }
+}

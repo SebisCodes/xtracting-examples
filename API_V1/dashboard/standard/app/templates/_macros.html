@@ -1,0 +1,310 @@
+{# Shared form pieces. Import with
+     {% from "_macros.html" import typeahead, chipinput, timeframe_toolbar, print_export_buttons %}
+
+   typeahead
+   ---------
+   A text field with a suggestion list. THE PRINCIPLE, and it holds across
+   the whole dashboard: a hidden field carries the value, a text field
+   shows the set value AS ITS PLACEHOLDER and opens a filtered list on
+   focus, click or typing. The behaviour lives in static/js/typeahead.js;
+   the contract is written down in
+   /home/sebi/Documents/Github/.references/ui/typeahead-input.md.
+
+   Why not <select>: a list of thirty thousand entities is unusable, and a
+   select cannot be narrowed by typing. Why the placeholder and not a value
+   in the field: the field stays empty and takes a new entry at once, with
+   no deleting first - and one still sees what is set.
+
+   Arguments
+     name         name of the hidden input (what the form / state.js reads)
+     value        the current value ("" for none)
+     label        the visible caption of the field (a real <label>)
+     suggest_url  "/api/suggest/entity" etc. - server suggestions; "" for none
+     placeholder  what the field says when nothing is set
+     empty_label  text of the reset row ("- all -"); none → no reset row
+     min_chars    characters to type before the server is asked (0 = ask on open)
+     value_label  display text for `value` when it differs (timeframe "7d" → "Last 7 days")
+     options      static options: strings, [value, label] pairs or
+                  {value, label, extra, count, hint} objects; used alone or
+                  together with suggest_url (static first, server results replace)
+     hint         a line under the field ("city - region - country")
+     submit       true → choosing submits the enclosing form (filters);
+                  false (default) → only the typeahead:choose event fires
+     limit        how many server suggestions to ask for (NN/g: keep it short)
+     id           id of the text input (derived from name when omitted)
+     no_suggestion  wording of the last row when nothing matches. The default
+                  ("no suggestion - your text is still searched") is true of a
+                  search field and false of a field whose text is stored, so a
+                  configuration field passes its own sentence.
+
+   CSS WARNING: the suggestion list is absolutely positioned. An
+   `overflow: hidden` or `overflow-y: auto` on ANY ancestor cuts it off -
+   the HTML is complete, nothing is visible. It has vanished that way
+   twice, and both times it looked as if the field itself were missing.
+#}
+{% macro typeahead(name, value="", label="", suggest_url="", placeholder="",
+                   empty_label=none, min_chars=0, value_label=none, options=none,
+                   hint="", submit=false, limit=12, id=none, autofocus=false,
+                   no_suggestion=none) -%}
+{%- set field_id = id or ("ta-" ~ name) -%}
+{%- set shown = value_label if value_label else value -%}
+<div class="typeahead field{{ ' is-set' if value }}">
+  {%- if label %}
+  <label class="field-label" for="{{ field_id }}">{{ label }}{% if hint %}{{ help_icon(field_id) }}{% endif %}</label>
+  {%- endif %}
+  <input type="hidden" name="{{ name }}" value="{{ value or '' }}">
+  <input type="text" id="{{ field_id }}" class="typeahead-input"
+         autocomplete="off" spellcheck="false"
+         data-typeahead data-target="{{ name }}"
+         placeholder="{{ shown or placeholder }}"
+         data-placeholder="{{ placeholder }}"
+         {%- if suggest_url %} data-suggest="{{ suggest_url }}" data-limit="{{ limit }}"{% endif %}
+         data-min="{{ min_chars }}"
+         {%- if empty_label is not none %} data-empty-label="{{ empty_label }}"{% endif %}
+         {%- if no_suggestion is not none %} data-no-suggestion="{{ no_suggestion }}"{% endif %}
+         data-submit="{{ 'true' if submit else 'false' }}"
+         {%- if options %} data-options='{{ options|tojson }}'{% endif %}
+         {%- if hint %} aria-describedby="{{ field_id }}-hint"{% endif %}
+         {%- if autofocus %} autofocus{% endif %}>
+  {%- if hint %}{% call help_text(field_id) %}{{ hint }}{% endcall %}{% endif %}
+</div>
+{%- endmacro %}
+
+
+{# chipinput
+   ---------
+   Several search terms as chips. `,` or Enter makes a chip, Backspace in
+   the empty field removes the last one, pasting "a, b" splits. The hidden
+   input `name` carries a JSON array. See static/js/chips.js.
+#}
+{% macro chipinput(name, values=none, label="Search terms", placeholder="Type a term, then Enter or comma", id=none) -%}
+{%- set field_id = id or ("chips-" ~ name) -%}
+<div class="chips field" data-chips>
+  <label class="field-label" for="{{ field_id }}">{{ label }}{{ help_icon(field_id) }}</label>
+  <input type="hidden" name="{{ name }}" value='{{ (values or [])|tojson }}'>
+  <div class="chips-box">
+    <ul class="chips-list" aria-label="{{ label }}"></ul>
+    <input type="text" id="{{ field_id }}" class="chips-input" autocomplete="off"
+           placeholder="{{ placeholder }}" aria-describedby="{{ field_id }}-hint">
+  </div>
+  {%- call help_text(field_id) %}Enter or a comma makes a term into a chip. Backspace in the empty field removes the last one, and pasting &quot;a, b&quot; splits it into two.{% endcall %}
+</div>
+{%- endmacro %}
+
+
+{# timeframe_toolbar
+   -----------------
+   ◀ [Last 7 days ▾] ▶ and a caption naming the period shown. `tab` tells
+   the JS which diagrams tab this toolbar belongs to (every tab keeps its
+   own timeframe and page). The buttons are real buttons with text labels
+   for screen readers; the arrows are decoration.
+
+   Values match app/timeframes.py: 24h 7d 30d 90d 6m 1y 3y 5y.
+#}
+{% macro timeframe_toolbar(tab, timeframe="7d", page=0, caption="") -%}
+{%- set frames = [("24h", "Last 24 hours"), ("7d", "Last 7 days"), ("30d", "Last 30 days"),
+                  ("90d", "Last 90 days"), ("6m", "Last 6 months"), ("1y", "Last year"),
+                  ("3y", "Last 3 years"), ("5y", "Last 5 years")] -%}
+<div class="toolbar timeframe-toolbar" role="group" aria-label="Timeframe for {{ tab }}"
+     data-timeframe-toolbar="{{ tab }}" data-page="{{ page }}">
+  <button type="button" class="button button--secondary" data-timeframe-prev
+          aria-label="Earlier period"><span aria-hidden="true">◀</span><span class="visually-hidden">Earlier</span></button>
+  <label class="visually-hidden" for="timeframe-{{ tab }}">Timeframe</label>
+  <select id="timeframe-{{ tab }}" class="timeframe-select" data-timeframe-select>
+    {%- for value, text in frames %}
+    <option value="{{ value }}"{{ ' selected' if value == timeframe }}>{{ text }}</option>
+    {%- endfor %}
+  </select>
+  <button type="button" class="button button--secondary" data-timeframe-next
+          aria-label="Later period"{{ ' disabled' if page == 0 }}><span aria-hidden="true">▶</span><span class="visually-hidden">Later</span></button>
+  <span class="timeframe-caption" data-period-caption aria-live="polite">{{ caption }}</span>
+</div>
+{%- endmacro %}
+
+
+{# print_export_buttons
+   --------------------
+   Print and the Export menu for a view. `view` is the name /api/export
+   knows (dashboard, query, events, diagrams, map, graph, buckets, ...).
+   <details> is the menu: it opens by keyboard without any JS, and
+   static/js/export.js only refreshes the links and does the PDF.
+#}
+{% macro print_export_buttons(view) -%}
+<div class="print-export">
+  <button type="button" class="button button--secondary" data-print>Print</button>
+  <details class="export-menu" data-export data-view="{{ view }}">
+    <summary class="button button--secondary">Export</summary>
+    <div class="export-menu-items" role="group" aria-label="Export {{ view }}">
+      <button type="button" class="export-item" data-export-pdf>PDF (this page)</button>
+      <a class="export-item" data-export-format="csv" href="/api/export/{{ view }}.csv">CSV</a>
+      <a class="export-item" data-export-format="json" href="/api/export/{{ view }}.json">JSON</a>
+      <p class="export-notice" aria-live="polite"></p>
+    </div>
+  </details>
+</div>
+{%- endmacro %}
+
+{#- ── THE ROW THAT SENDS A QUERY ──────────────────────────────────────
+
+    One button, one word, one place: under the fields, left-aligned, on
+    every view where something can be typed and searched.
+
+    Not a submit button per view each called something else - "Show
+    diagrams", "Show on map", "Draw graph", "Show events", "Count here",
+    "Show" - most of them sitting inside the row of fields as one more
+    cell, so they read as another control rather than as the way to ask.
+    Seven words for one action is six words too many.
+
+    The status line beside it is the other half: a query that takes eight
+    seconds with nothing on screen reads as a broken page. It is a live
+    region, so a screen reader hears "Searching…" as well
+    (static/js/api.js: searching()).
+
+    `extra` takes the buttons that belong to this row and are not the
+    query - "Start again", "Clear filters". A button that does something
+    else entirely (Save image, zoom) stays where it is.
+-#}
+{% macro search_actions(id="", label="Search", clear_id="", clear="", extra="", status_id="") -%}
+{#- THE GLYPH GOES BEFORE THE WORD, on both buttons and on every view.
+    `.button` is already an inline-flex row with a gap, so the icon needs
+    nothing of its own; and because an <svg> carries no text, the button's
+    textContent is still exactly "Search" - which is what the whole product
+    calls this control and what tests/ui/test_search_button.py reads.
+
+    THE WORDS STAY. A magnifier alone would be one more thing to learn, and
+    this file says two screens up why an icon-only control is a memory test.
+    The glyph is the SAME magnifier the Query view wears in the top bar, so
+    "ask the archive" looks the same wherever it is offered. -#}
+<div class="toolbar query-actions" data-search-actions>
+  <button type="submit" class="button"{% if id %} id="{{ id }}"{% endif %}>{{ icon("query") }}{{ label }}</button>
+  {#- CLEAR IS ALWAYS THERE, beside the button that asks. Emptying a form by
+      hand is six fields, a date range and a checklist, and a reader who
+      cannot see how to get back to "everything" stops narrowing at all.
+
+      `clear="custom"` says the view has its own handler and layout.js keeps
+      its hands off: the Query page also puts the radius back to its default
+      and closes the disambiguation list, and the Log puts the time range
+      back - things a generic "empty every field" cannot know. Everywhere
+      else layout.js empties the form and sends it once. -#}
+  <button type="button" class="button button--secondary"
+          data-search-clear{% if clear %}="{{ clear }}"{% endif %}
+          {% if clear_id %}id="{{ clear_id }}"{% endif %}>{{ icon("clear") }}Clear</button>
+  {{ extra }}
+  <p class="query-status" data-search-status aria-live="polite"
+     {%- if status_id %} id="{{ status_id }}"{% endif %}></p>
+</div>
+{%- endmacro %}
+
+{#- ── ICONS ───────────────────────────────────────────────────────────
+
+    A small, closed set drawn as inline SVG: no font to load, no request to
+    make, and `currentColor` so an icon is the same colour as the text of
+    the button it sits in - including in a forced-colours mode, where an
+    image would disappear.
+
+    EVERY ICON BUTTON KEEPS ITS WORDS, in `aria-label` (what a screen reader
+    announces) and in `title` (what a pointer reveals). The tooltip is the
+    NAME OF THE FUNCTION in one to three words - "Enlarge Diagram", "Save
+    Diagram" - and the accessible name adds which chart it belongs to, so a
+    pointer gets the short answer and a screen reader the unambiguous one.
+
+    THREE OF THESE GLYPHS SAY WHAT THEY DO RATHER THAN WHAT THEY ARE. The
+    enlarge was four corner brackets, which reads as a crop mark; it is the
+    two diagonal arrows every viewer uses for full screen. The save was a
+    picture frame, which says "image" and not "take one" - it is the download
+    arrow. The numbers glyph was a grid, which is a table and not a list; it
+    is three lines. This product says
+    elsewhere that a bar of icons with no text is a bar nobody can read
+    (app.css, the nav); these three sit in the corner of a chart card where
+    the words did not fit beside the title, and the words are still there
+    for anyone who asks for them. The icon itself is aria-hidden: it is a
+    picture of the button, not a second name for it.
+-#}
+{% macro icon(name) -%}
+{#- ONE PLACE FOR EVERY GLYPH IN THE PRODUCT, and the view icons are in it
+    for a second reason besides tidiness: the top bar renders them, and
+    static/js/map.js CLONES them out of the bar rather than carrying a copy
+    (see iconFor there). A view whose icon changes here changes everywhere it
+    is shown, and there is no second list to forget.
+
+    THE ELEVEN VIEWS ARE KEYED BY THEIR OWN ID, the one routers/pages.py uses
+    in VIEWS, so the bar asks for `icon(id)` and cannot ask for a name that is
+    not a view. Each draws what its page is ABOUT rather than a generic shape:
+    a reader who has seen the page once should recognise the glyph without
+    reading the word beside it - and the word is beside it in any case, because
+    an icon-only bar is a memory test (app.css says so where the bar is
+    styled).
+
+    `projects` is not in the bar; it is reached from the Watchlist, and
+    routers/pages.py says why. `newtab` is the one glyph that is not a view: it
+    goes on a link that opens in a new tab, next to that view's own icon,
+    because "where this goes" and "it will not take this page away from you"
+    are two different promises.
+
+    NO COMMENT INSIDE THE DICT. A Jinja comment between two entries of the set
+    literal below is a template that does not compile, and the page that uses it
+    answers 500 - which is how this file broke once already.
+    tests/unit/test_templates_compile.py is the guard that noticed. -#}
+{%- set paths = {
+  "numbers": "M4 6h16M4 12h16M4 18h16",
+  "enlarge": "M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7",
+  "image":   "M12 4v10M8 11l4 4 4-4M5 19h14",
+  "camera":  "M4 8h3l2-2h6l2 2h3v11H4zM12 16a3.5 3.5 0 100-7 3.5 3.5 0 000 7",
+  "dashboard": "M4 4h7v7H4zM13 4h7v4h-7zM13 11h7v9h-7zM4 14h7v6H4z",
+  "query":     "M11 4a7 7 0 100 14 7 7 0 000-14M20 20l-4.6-4.6",
+  "events":    "M4 6h16v14H4zM4 10h16M9 4v4M15 4v4",
+  "diagrams":  "M4 20h16M7 20v-7M12 20V6M17 20v-10",
+  "map":       "M12 21s7-7.6 7-12a7 7 0 10-14 0c0 4.4 7 12 7 12M12 9.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5",
+  "heatmap":   "M12 12m-2.5 0a2.5 2.5 0 105 0a2.5 2.5 0 10-5 0M12 12m-6.5 0a6.5 6.5 0 1013 0a6.5 6.5 0 10-13 0",
+  "graph":     "M6 7m-2 0a2 2 0 104 0a2 2 0 10-4 0M18 6m-2 0a2 2 0 104 0a2 2 0 10-4 0M12 18m-2 0a2 2 0 104 0a2 2 0 10-4 0M8 6.7l8-.5M7.2 8.9l3.6 7.3M16.8 7.6l-3.6 8.6",
+  "buckets":   "M4 7h5.5l2 2H20v10H4zM4 7V5h5l2 2",
+  "colours":   "M12 3.5s6 6.6 6 10.2a6 6 0 11-12 0c0-3.6 6-10.2 6-10.2",
+  "sources":   "M2.5 12s3.6-6 9.5-6 9.5 6 9.5 6-3.6 6-9.5 6-9.5-6-9.5-6M12 14.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5",
+  "logs":      "M5 6h14M5 12h14M5 18h9",
+  "projects":  "M12 3l8 4-8 4-8-4zM4 12l8 4 8-4M4 17l8 4 8-4",
+  "newtab":    "M14 4h6v6M20 4l-8.5 8.5M18 13.5V19a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5.5",
+  "clear":     "M6 6l12 12M18 6L6 18",
+  "empty":     "M4 13h4l1.5 3h5L16 13h4M4 13l2.5-7h11L20 13v5a1 1 0 01-1 1H5a1 1 0 01-1-1z",
+  "info":      "M12 21a9 9 0 100-18 9 9 0 000 18M12 11v5M12 7.6v.5",
+} -%}
+<svg class="icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"
+     fill="none" stroke="currentColor" stroke-width="1.75"
+     stroke-linecap="round" stroke-linejoin="round"><path d="{{ paths[name] }}"/></svg>
+{%- endmacro %}
+
+
+{% macro help_icon(target, text) -%}
+{#- THE EXPLANATION OF ONE CONTROL, beside its label, out of the way until asked
+    for.
+
+    WHY IT IS A BUTTON AND NOT A `title=`. This product says in four places -
+    static/js/drilldown.js twice, static/css/settings.css and static/js/map.js -
+    that content may never live only in a hover, because a tooltip needs a
+    mouse and half the people who need the sentence are on a tablet. So: the
+    pointer opens the bubble, and so do a click and the keyboard. Once clicked
+    it stays open until it is clicked again, Escape is pressed, or something
+    else on the page is clicked.
+
+    The bubble is a real element in the DOM with an id, and the control points
+    at it with `aria-describedby` - the same wiring the fourteen visible help
+    sentences already used, so a screen reader hears the description as part of
+    the field rather than as a stray paragraph after it.
+
+    `target` is the id of the control this explains. The bubble takes that id
+    plus `-hint`, so callers never invent one.
+
+    static/js/hints.js does the opening; without JavaScript the bubble is
+    simply visible, which is the right failure. -#}
+<button type="button" class="hint-button" data-hint="{{ target }}-hint"
+        aria-expanded="false" aria-controls="{{ target }}-hint"
+        title="What this is" aria-label="What this is for">{{ icon("info") }}</button>
+{%- endmacro %}
+
+
+{% macro help_text(target) -%}
+{#- The bubble itself, emitted where it should READ - under the control, not
+    under the label - so that the tab order and the reading order agree. Use it
+    with `help_icon(target, ...)` and `aria-describedby="{{ target }}-hint"` on
+    the control. `caller()` carries the sentence, so it may hold markup. -#}
+<div class="hint-bubble" id="{{ target }}-hint" role="note" hidden>{{ caller() }}</div>
+{%- endmacro %}
