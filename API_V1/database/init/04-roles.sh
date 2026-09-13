@@ -12,13 +12,13 @@
 # Set the four variables and the boundary that 03-scraper.sql describes
 # becomes one the database enforces:
 #
-#   DASHBOARD_DB_USER  SELECT on processed_data, monitoring and crawler;
+#   DASHBOARD_DB_USER  SELECT on processed_data, monitoring and scraper;
 #                      read and write in dashboard and scraper_config.
 #                      Cannot touch a row of the archive, cannot touch the
 #                      crawler's state.
 #   SCRAPER_DB_USER    SELECT on processed_data, scraper_config and
 #                      dashboard (for the pause switch in
-#                      dashboard.settings); read and write in crawler;
+#                      dashboard.settings); read and write in scraper;
 #                      INSERT into monitoring.scraper_runs and nothing else
 #                      in monitoring. Cannot change a configuration.
 #
@@ -162,7 +162,7 @@ END
 $$;
 
 -- ---------- Dashboard: read the archive and the crawler's state ----------
-GRANT USAGE ON SCHEMA processed_data, monitoring, crawler TO :"dashboard_user";
+GRANT USAGE ON SCHEMA processed_data, monitoring, scraper TO :"dashboard_user";
 GRANT SELECT ON ALL TABLES IN SCHEMA processed_data TO :"dashboard_user";
 GRANT SELECT ON ALL TABLES IN SCHEMA monitoring     TO :"dashboard_user";
 GRANT SELECT ON ALL TABLES IN SCHEMA scraper        TO :"dashboard_user";
