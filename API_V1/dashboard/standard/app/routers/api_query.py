@@ -522,10 +522,15 @@ _KIND_BODIES = {
         SELECT 'connection', 1,
                c.text_task_id, c.bigint_id,
                concat_ws(' → ', c.text_fk_parent_entity_id, c.text_fk_child_entity_id),
-               nullif(concat_ws(', ',
-                   nullif(concat_ws(' / ', nullif(c.text_type_parent_to_child, ''),
-                                    nullif(c.text_type_child_to_parent, '')), ''),
-                   nullif(c.text_reason, '')), ''),
+               -- THE TWO ROLES AND THE REASON, KEPT APART. The card's body is
+               -- a sentence built in the route once the two ends have names
+               -- ("Foxconn is a Supplier of Apple"), so the three parts go up
+               -- separately, joined by a unit separator that no reason can
+               -- contain, rather than as one string the route would have to
+               -- take apart again.
+               concat_ws(E'\\x1f', coalesce(c.text_type_parent_to_child, ''),
+                         coalesce(c.text_type_child_to_parent, ''),
+                         coalesce(c.text_reason, '')),
                '',
                c.text_type_parent_to_child,
                (SELECT jsonb_agg(DISTINCT jsonb_build_array(en.name, coalesce(en.type, '')))
@@ -758,6 +763,48 @@ def _one_row(conn, ctx, table: str, columns: list[str], where: sql.Composable,
     return dict(row) if row else None
 
 
+def connection_sentences(ends: list[str], parent_role: str, child_role: str,
+                         reason: str = "") -> str:
+    """The two readings of one connection, as prose.
+
+    The archive holds a connection as (parent, child, the parent's role, the
+    child's role), and the parent's role is the word that completes "Parent is
+    a X of Child" - that is how the extraction is asked for it. So (Foxconn,
+    Apple, Supplier, Customer) reads "Foxconn is a Supplier of Apple. Apple is
+    a Customer of Foxconn." A role the archive left empty leaves its sentence
+    out rather than printing "is a  of".
+
+    >>> connection_sentences(["Foxconn", "Apple"], "Supplier", "Customer")
+    'Foxconn is a Supplier of Apple. Apple is a Customer of Foxconn.'
+    >>> connection_sentences(["Foxconn", "Apple"], "Supplier", "", "Named in the filing.")
+    'Foxconn is a Supplier of Apple. Named in the filing.'
+    >>> connection_sentences(["Foxconn"], "Supplier", "Customer")
+    ''
+    """
+    if len(ends) != 2:
+        return (reason or "").strip()
+    a, b = (e.strip() for e in ends)
+    parts = []
+    if parent_role.strip():
+        parts.append(connection_sentence(a, parent_role, b))
+    if child_role.strip():
+        parts.append(connection_sentence(b, child_role, a))
+    if (reason or "").strip():
+        parts.append(reason.strip())
+    return " ".join(parts)
+
+
+def connection_sentence(one: str, role: str, other: str) -> str:
+    """"Foxconn is a Supplier of Apple Inc." - and no second full stop after
+    a name that ends in one.
+
+    >>> connection_sentence("Foxconn", " Supplier ", "Apple Inc.")
+    'Foxconn is a Supplier of Apple Inc.'
+    """
+    text = f"{one.strip()} is a {role.strip()} of {other.strip()}"
+    return text if text.endswith(".") else text + "."
+
+
 def _readable(row: dict[str, Any] | None) -> dict[str, Any]:
     """The archive's column names are not words. `text_short_term_outlook`
     becomes "short term outlook", dates become strings, and anything empty
@@ -825,7 +872,9 @@ def detail(req: DetailRequest, ctx: ContextDep, db: Database = Depends(get_db)):
             entities = [dict(r) for r in found]
         else:
             for one in [i for i in ids if i]:
-                got = _one_row(conn, ctx, "entities", _DETAIL_COLUMNS["entities"],
+                # The id comes along so a connection can tell its two ends
+                # apart; _readable() keeps it out of what is printed.
+                got = _one_row(conn, ctx, "entities", _DETAIL_COLUMNS["entities"] + ["text_entity_id"],
                                sql.SQL("t.text_task_id = %(task)s AND t.text_entity_id = %(id)s"),
                                {"task": req.task_id, "id": one})
                 if got:
@@ -848,10 +897,30 @@ def detail(req: DetailRequest, ctx: ContextDep, db: Database = Depends(get_db)):
         head = source_heading(source.get("text_name") or "", source.get("text_uri") or "")
         heading = {"text": head["text"], "derived": head["derived"]}
 
+    readable = _readable(row)
+    if kind == "connection":
+        # A CONNECTION IS READ AS A SENTENCE, NOT AS TWO ROLE WORDS. "type
+        # parent to child: Supplier" next to a list of two entities leaves
+        # the reader to work out which is the parent; the popup says
+        # "Foxconn is a Supplier of Apple" and the other way round, each
+        # end named - or, where the archive has no entity row for an end,
+        # called by its id rather than left out.
+        named = {e.get("text_entity_id"): e.get("text_name") or "" for e in entities}
+        ends = [named.get(row.get(c)) or str(row.get(c) or "") for c in (entity_cols or [])]
+        ptc = str(row.get("text_type_parent_to_child") or "")
+        ctp = str(row.get("text_type_child_to_parent") or "")
+        sentences = {}
+        if ends[0] and ends[1] and ptc.strip():
+            sentences["connection"] = connection_sentence(ends[0], ptc, ends[1])
+        if ends[0] and ends[1] and ctp.strip():
+            sentences["the other way round"] = connection_sentence(ends[1], ctp, ends[0])
+        readable = {**sentences, **{k: v for k, v in readable.items()
+                                    if k not in ("type parent to child", "type child to parent")}}
+
     return {
         "kind": kind,
         "label": KIND_LABELS[kind],
-        "row": _readable(row),
+        "row": readable,
         "entities": [{"name": e.get("text_name") or "", "type": e.get("text_type") or "",
                       "detail": _readable(e)} for e in entities],
         "source": None if not source else {
@@ -966,6 +1035,14 @@ def search(req: SearchRequest, ctx: ContextDep, db: Database = Depends(get_db)):
                      for part in (title.split(" → ") if title else [])]
             title = " → ".join(parts)
             derived = True
+            # THE BODY IS THE SENTENCE. "Supplier / Customer" under
+            # "Foxconn → Apple" leaves the reader to work out which end
+            # supplies which; the archive's two role words are each the
+            # answer to one direction (the parent's word completes "Parent
+            # is a X of Child"), so the card says both, in full.
+            roles = (r["body"] or "").split("\x1f")
+            ptc, ctp, reason = (roles + ["", "", ""])[:3]
+            r = {**r, "body": connection_sentences(parts, ptc, ctp, reason)}
             # THE BRANCH ALREADY NAMED BOTH ENDS, with their types; the ids
             # above are only what the TITLE is built from. The fallback is
             # for a connection whose ends are not in `ents` - one side stands

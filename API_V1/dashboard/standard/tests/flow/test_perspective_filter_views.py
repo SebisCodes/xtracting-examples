@@ -1,6 +1,6 @@
 """The perspective filter, against the preseeded archive.
 
-    DATABASE_URL=postgresql://... python -m pytest tests/flow/test_perspective_filter.py -q
+    DATABASE_URL=postgresql://... python -m pytest tests/flow/test_perspective_filter_views.py -q
 
 Two selectors in the top bar mean one sentence - show only what came from
 documents that carry, for this perspective, at least this importance - and it
