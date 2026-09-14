@@ -1,0 +1,60 @@
+{#- The gate.
+
+    IT SAYS AS LITTLE AS POSSIBLE. No project name, no host, no count of
+    anything, no hint about what is behind it, no link anywhere. Somebody who
+    does not have the password leaves knowing exactly what they knew when
+    they arrived - which is the whole reason this page exists, since the
+    dashboard behind it names a customer's projects on its first screen.
+
+    It does not extend _layout.html. That layout carries the project and
+    language selectors, the eleven view buttons and the Export menu, every
+    one of which is a fact about the installation; and it asks the database
+    for the project list, which is a query run for somebody who has not
+    passed the gate. This page stands on its own and needs nothing but the
+    stylesheet.
+
+    Variables from main.py: error, turnstile_site_key, next. -#}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in</title>
+  <link rel="stylesheet" href="{{ static('css/app.css') }}">
+  <link rel="icon" href="data:,">
+  {#- ROBOTS, BELT AND BRACES. The gate answers every request, so a crawler
+      that finds the address gets this page and nothing else - but a page
+      that says "sign in" under a customer's hostname is still worth keeping
+      out of an index. -#}
+  <meta name="robots" content="noindex, nofollow">
+  {%- if turnstile_site_key %}
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+  {%- endif %}
+</head>
+<body class="gate-page">
+  <main class="gate-card" id="main">
+    <h1>Sign in</h1>
+    <p class="muted">This installation is closed. If you have the password, it goes here.</p>
+
+    {%- if error %}
+    {#- One message, whatever failed. A form that says "wrong password" for
+        one thing and "the bot check failed" for another tells somebody
+        working through passwords which of the two they cleared. -#}
+    <p class="notice notice--error gate-error" role="alert">{{ error }}</p>
+    {%- endif %}
+
+    <form method="post" action="/gate" autocomplete="off">
+      <input type="hidden" name="next" value="{{ next }}">
+      <div class="field">
+        <label class="field-label" for="gate-password">Password</label>
+        <input class="gate-input" type="password" id="gate-password" name="password"
+               required autofocus autocomplete="current-password" spellcheck="false">
+      </div>
+      {%- if turnstile_site_key %}
+      <div class="cf-turnstile" data-sitekey="{{ turnstile_site_key }}"></div>
+      {%- endif %}
+      <button type="submit" class="button">Continue</button>
+    </form>
+  </main>
+</body>
+</html>

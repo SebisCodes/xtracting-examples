@@ -1,0 +1,69 @@
+{#- The two row shapes of the "Links found" dialog, as <template> elements.
+
+    They live in a partial rather than in linkpicker.js so that the wording,
+    the headings and the ARIA of a row can be read in one place, by
+    somebody who does not read JavaScript - the same reason buckets.html
+    keeps its card here. linkpicker.js clones them and fills the
+    data-* hooks; it adds no text of its own except the numbers.
+
+    THE TICK IS THE PRIMARY ACT OF THIS DIALOG, so its box is a full
+    44 x 44 px target (sources.css) and it carries its own hidden label -
+    "Collect https://…/rent/40012300" reads as a sentence in a screen
+    reader, where "checkbox, unchecked" alone would not.
+
+    A row the site's robots.txt forbids is not offered: the box is
+    disabled, the row says "not allowed by robots.txt" in words, and the
+    padlock repeats it. Colour carries nothing here.
+
+    A GROUP STARTS FOLDED. Eighty rows of one shape push the second shape
+    eight screens down, and the group tick - the control that makes a list
+    of hundreds tickable at all - goes with it. The head carries the label,
+    "n of m ticked" and three example addresses, which is everything the
+    decision needs; the rows are the exception path, one press away.
+-#}
+<template id="link-group-template">
+  <li class="picker-group" data-group data-open="false">
+    <div class="group-head">
+      <label class="group-tick">
+        <input type="checkbox" data-group-tick>
+        <span class="visually-hidden" data-group-tick-label>Tick every link in this group</span>
+      </label>
+      <button type="button" class="group-toggle" data-group-toggle aria-expanded="false">
+        <span class="group-marker" aria-hidden="true">▾</span>
+        <span data-group-label></span>
+      </button>
+      <span class="group-count" data-group-count></span>
+      {#- Up to three addresses of the group, in the head. They are what a
+          shape means: "/rent/#" is a line of punctuation until three real
+          addresses stand under it. With them there, the group can be
+          ticked or left alone without ever being opened - which is the
+          whole point of the group, and why the rows start folded away. -#}
+      <ul class="group-examples" data-group-example></ul>
+    </div>
+    <ul class="link-rows" data-rows></ul>
+    {#- Only the first rows of a big group are drawn. Two thousand rows of
+        DOM make the dialog slow to open and slow to tick; a group tick
+        already covers all of them, and this button draws the rest for
+        somebody who wants to look through them one by one. -#}
+    <button type="button" class="picker-more" data-more hidden></button>
+  </li>
+</template>
+
+<template id="link-row-template">
+  {#- THE WHOLE ROW IS THE LABEL, so a click anywhere on it selects the link
+      - the address, the tags, the empty space to the right of them. A 18 px
+      box beside a wide row is a target people miss and then think the list
+      is broken; this is the browser's own behaviour for a label, so the
+      keyboard, the focus ring and the screen reader are unchanged. -#}
+  <li class="link-row" data-link>
+    <label class="link-tick">
+      <input type="checkbox" data-tick>
+      <span class="visually-hidden" data-tick-label></span>
+      <span class="link-body">
+        <span class="link-text" data-text></span>
+        <span class="link-tags" data-tags></span>
+        <span class="link-url" data-url></span>
+      </span>
+    </label>
+  </li>
+</template>

@@ -1,0 +1,20 @@
+{#- The last-resort page: a view whose template cannot be found.
+
+    That is a deployment fault - every view in the navigation has one - so
+    this says what happened and offers the way back, rather than a 500 with
+    nothing in it. It names no internal path: a customer cannot act on one,
+    and the server log already carries it. -#}
+{% extends "_layout.html" %}
+
+{% block content %}
+<div class="page-header">
+  <h1>{{ title }}</h1>
+  <p class="page-purpose">This page could not be loaded.</p>
+</div>
+
+<div class="card">
+  <p>Something is missing from this installation. The other views are unaffected -
+     pick one from the bar above.</p>
+  <p class="muted">If it keeps happening, the server log says which file could not be found.</p>
+</div>
+{% endblock %}

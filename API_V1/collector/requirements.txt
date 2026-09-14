@@ -1,0 +1,4 @@
+# The collector's two dependencies, pinned to what the tests run with. The
+# database driver is the same pin as the crawler's: both write the one archive.
+requests==2.34.2
+psycopg[binary]==3.3.5

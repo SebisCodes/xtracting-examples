@@ -1,0 +1,41 @@
+{#- The two row shapes of the "Files found" dialog.
+
+    THE TWO COLUMNS ARE TWO DIFFERENT IDEAS, and the markup keeps them
+    apart on purpose: a type row is a standing rule - "send every PDF
+    of this source, up to 25 MB" - and a file row is one exception to it,
+    about one address found in the sample. Mixing them into one list is
+    what makes people tick a hundred files by hand every time the site
+    publishes a new one.
+
+    A file that cannot be sent as text (a scan without a text layer, a file
+    that is too large, something served as a PDF that is not one) is shown
+    with its reason and no tick box: there is nothing to decide about it.
+-#}
+<template id="file-type-template">
+  <li class="type-row" data-type>
+    <label class="type-tick">
+      <input type="checkbox" data-type-tick>
+      <span class="type-name" data-type-name></span>
+    </label>
+    <span class="type-count" data-type-count></span>
+    <label class="type-limit" data-limit-box hidden>
+      <span>Largest file, in MB</span>
+      <input type="number" min="1" max="500" step="1" data-type-limit>
+    </label>
+  </li>
+</template>
+
+<template id="file-row-template">
+  <li class="file-row" data-file>
+    <label class="link-tick" data-file-tick-box>
+      <input type="checkbox" data-file-tick>
+      <span class="visually-hidden" data-file-tick-label></span>
+    </label>
+    <div class="link-body">
+      <span class="file-name" data-file-name></span>
+      <span class="file-from" data-file-from></span>
+      <span class="file-reason" data-file-reason></span>
+    </div>
+    <span class="file-size" data-file-size></span>
+  </li>
+</template>

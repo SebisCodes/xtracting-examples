@@ -1,0 +1,5 @@
+# Only for running the tests. The stand-in site, the fake Xtracting API and the
+# browser all come from crawlkit's requirements, which requirements.txt pulls in.
+-r requirements.txt
+
+pytest==9.1.1
