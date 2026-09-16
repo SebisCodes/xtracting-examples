@@ -67,7 +67,9 @@ from fastapi.responses import Response
 from ..context import Context, ContextDep
 from ..db import Database, get_db
 from ..textclean import spreadsheet_safe
-from . import api_dashboard, api_diagrams, api_events, api_graph, api_logs, api_map, api_query, api_settings
+from ..charts import listing
+from . import (api_dashboard, api_diagrams, api_events, api_graph, api_logs, api_map, api_query,
+               api_settings, api_tables)
 
 router = APIRouter(tags=["export"])
 
@@ -407,6 +409,30 @@ def _drilldown(request: Request, ctx: Context, db: Database) -> Built:
     }
 
 
+def _tables(request: Request, ctx: Context, db: Database) -> Built:
+    """The rows of one table as the Tables view lists them - the same
+    filters the page's URL carries, up to the ceiling, in one statement.
+    A grouped sort (most, fewest) exports the group rows: name, type, how
+    many, newest."""
+    tab = _str(request, "tab", "sources") or "sources"
+    api_tables._tab_or_400(tab)
+    filters = api_tables._filters(
+        _str(request, "q"), _str(request, "type"), _str(request, "sort", "newest"),
+        _str(request, "task"), _str(request, "source"), _str(request, "exact"),
+        _str(request, "name"), _str(request, "entity_id"))
+    with db.read() as conn:
+        api_tables._begin(conn)
+        found = listing.page(conn, ctx, tab, filters, limit=MAX_ROWS + 1, offset=0, count=False)
+    truncated = len(found.rows) > MAX_ROWS
+    del found.rows[MAX_ROWS:]
+    return found.csv_columns(), found.csv_rows(), {
+        "tab": tab, "q": filters.q, "type": filters.type, "sort": filters.sort,
+        "exact": filters.exact, "task": filters.task, "source": filters.source,
+        "name": filters.name, "entity_id": filters.entity_id,
+        "grouped": found.grouped, "truncated": truncated,
+    }
+
+
 def _hidden(request: Request) -> set[str]:
     """The map views keep the types a reader has UNTICKED in the URL (`hide`),
     while the API takes the ones that are wanted. The rows are filtered here
@@ -697,6 +723,8 @@ VIEWS: dict[str, tuple[Callable[[Request, Context, Database], Built], tuple[str,
     "query": (_query, ("terms", "all", "address", "city", "region", "country",
                        "lat", "lng", "km", "from", "to"),
               "The search results, one row per match."),
+    "tables": (_tables, ("tab", "q", "type", "sort", "task", "source", "exact", "name", "entity_id"),
+               "The rows of one table, as the Tables view lists them."),
     "events": (_events, ("by", "q", "from", "to"), "Events with their types, dates and entities."),
     "diagrams": (_diagrams, ("scope", "tab", "q", "axis", "timeframe", "page"),
                  "Every point of every chart on one tab."),

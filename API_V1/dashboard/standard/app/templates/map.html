@@ -29,6 +29,9 @@
 <link rel="stylesheet" href="{{ static('vendor/leaflet.markercluster/MarkerCluster.Default.css') }}">
 <link rel="stylesheet" href="{{ static('css/views.css') }}">
 <link rel="stylesheet" href="{{ static('css/map.css') }}">
+{#- The rows behind a pin or a line: the popups open the same drilldown a
+    chart does (static/js/map.js), so its sheet is on this page. -#}
+<link rel="stylesheet" href="{{ static('css/drilldown.css') }}">
 {#- The tile server is a setting (DASHBOARD_TILE_URL); map.js reads it from
     here, exactly as minimap.js does on the Query page. -#}
 <meta name="tile-url" content="{{ request.app.state.cfg.tile_url if request.app.state.cfg is defined else '' }}">

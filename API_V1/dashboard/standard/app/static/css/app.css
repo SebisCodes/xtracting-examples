@@ -401,13 +401,28 @@ img, svg, canvas { max-width: 100%; }
  * is a memory test this dashboard refuses to set. The glyph goes BEFORE the word and
  * never instead of it.
  *
- * WHAT THE GLYPHS COST. Eleven buttons filled 974 of the 1024 px this
- * dashboard is laid out for, and an icon and its gap add about 24 px to each:
- * the row wraps to two on a 1024 px screen. That is why the padding is 0.6rem
- * here rather than the 0.875rem a button gets elsewhere, and why the gap is
- * tighter - it buys back most of it. `flex-wrap` is on, so what happens
- * past that point is a second row rather than a bar with buttons falling off
- * the end of it. */
+ * THE BAR IS ONE ROW AT 1024 PX, AND THAT IS MEASURED, NOT HOPED. A second
+ * row costs every view 48 px of its first screen - two rows of the log, the
+ * top of the map. The bar has 992 px between its paddings at that width,
+ * and the twelve buttons measure (Noto Sans, the system-ui of the machines
+ * this is laid out on, 16 px):
+ *
+ *    24 px glyph and word, 0.6rem padding, 0.4rem gap    1276 px
+ *    20 px glyph and word, 0.5rem padding, 0.3rem gap    1218 px
+ *    word only,            0.5rem padding                 921 px
+ *
+ * The words alone are 685 px of the first figure, so no padding or gap
+ * brings the glyphs under 992: with both at zero they still run to 1002.
+ * So under 1280 px the glyphs are not drawn and the padding is the 0.5rem
+ * a word needs; from 1280 up - the narrowest common laptop, where the bar
+ * has 1248 px - the glyph stands before the word, at 20 px so that the
+ * twelve fit with room to spare. The glyphs stay in the markup at every
+ * width: static/js/icons.js clones a view's glyph out of this bar for the
+ * drilldown rows and the map popups, and a clone is not under
+ * `.nav-button`, so it is drawn wherever it lands.
+ *
+ * `flex-wrap` is still on, so what happens under 953 px is a second row
+ * rather than a bar with buttons falling off the end of it. */
 .topbar-nav {
   display: flex;
   flex-wrap: wrap;
@@ -421,19 +436,21 @@ img, svg, canvas { max-width: 100%; }
 .nav-button {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.3rem;
   min-height: var(--control-h);
-  padding: 0 0.6rem;
+  padding: 0 0.5rem;
   border-radius: var(--radius);
   color: var(--text);
   text-decoration: none;
   font-weight: 500;
   border: 1px solid transparent;
 }
-/* The glyph is the same size as everywhere else and takes the link's colour,
- * so the current tab's icon turns with its text rather than staying dark on
- * the accent. */
-.nav-button .icon { flex: none; }
+/* The glyph takes the link's colour, so the current tab's icon turns with
+ * its text rather than staying dark on the accent. */
+.nav-button .icon { flex: none; width: 20px; height: 20px; }
+@media (max-width: 1279px) {
+  .nav-button .icon { display: none; }
+}
 .nav-button:hover { background: var(--surface-2); color: var(--text); }
 .nav-button[aria-current="page"] {
   background: var(--accent);

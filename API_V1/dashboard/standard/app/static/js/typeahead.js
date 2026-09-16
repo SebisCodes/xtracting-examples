@@ -56,7 +56,10 @@
  *    </div>
  *
  *  Events: the text input dispatches `typeahead:choose` (bubbles) with
- *  detail {value, label, typed, hint, via, ask}.
+ *  detail {value, label, typed, hint, via, ask}. A field with
+ *  `data-multi="true"` dispatches `typeahead:toggle` instead when a ROW is
+ *  picked - detail {value, label, hint, checked, memberId} - and keeps the
+ *  text and the list as they are; typed text still ends in `typeahead:choose`.
  *
  *  `typed` is true when Enter submitted the typed text rather than a
  *  suggestion. `via` is the GESTURE that ended the choice - "enter", "pick"
@@ -195,6 +198,12 @@ export function initTypeahead(field) {
   const emptyLabel = field.dataset.emptyLabel; // undefined → no reset row
   const submitOnChoose = field.dataset.submit !== "false";
   const noSuggestionText = field.dataset.noSuggestion || "No suggestion - your text is still searched";
+  /* OPT-IN, PER FIELD: every row carries a tick, and picking a row ADDS OR
+   * REMOVES what it names without closing the list or touching the typed
+   * text - the Buckets member picker, where five members are ticked from one
+   * search. Every other field keeps the close-on-pick contract above; the
+   * page tests pin it, so nothing below changes unless `data-multi` asks. */
+  const multi = field.dataset.multi === "true";
   // Present tense and an ellipsis: it says what is happening now, and it is
   // replaced the moment the answer arrives.
   const LOADING_TEXT = "Searching\u2026";
@@ -227,6 +236,7 @@ export function initTypeahead(field) {
   list.id = `${uid}-listbox`;
   list.setAttribute("role", "listbox");
   list.setAttribute("aria-label", field.getAttribute("aria-label") || labelText(field) || "Suggestions");
+  if (multi) list.setAttribute("aria-multiselectable", "true");
   popup.appendChild(list);
 
   // Notes live OUTSIDE the listbox: a listbox may only contain options,
@@ -271,6 +281,11 @@ export function initTypeahead(field) {
   let requestSeq = 0;
   const labels = new Map(); // value → label of everything ever seen
   const cache = new Map(); // q → options (bounded)
+  /* Multi mode only: the rows that stand for something the page holds, keyed
+   * by value and hint - "Apple Company" and "Apple Fruit" are two rows - and
+   * carrying the id the page needs to take it away again. The page fills it
+   * through setChosen() once the archive has said yes, never this file. */
+  const chosen = new Map();
   staticOptions.forEach((o) => labels.set(o.value, o));
 
   function labelOf(value) {
@@ -309,6 +324,22 @@ export function initTypeahead(field) {
   function setNote(text) {
     note.textContent = text || "";
     note.hidden = !text;
+  }
+
+  function chosenKey(value, hint) {
+    return `${value} ${hint || ""}`;
+  }
+
+  /* The tick names itself in the two words the state calls for, and the
+   * option carries the state (aria-checked) - the listbox is what a screen
+   * reader walks, and a span hidden from it may not be the only carrier. */
+  function markChecked(li, on) {
+    li.setAttribute("aria-checked", on ? "true" : "false");
+    const tick = li.querySelector(".typeahead-tick");
+    if (tick) {
+      tick.title = on ? "Remove member" : "Add member";
+      tick.setAttribute("aria-label", tick.title);
+    }
   }
 
   function render(filter, source) {
@@ -350,6 +381,14 @@ export function initTypeahead(field) {
       li.dataset.value = o.value;
       li.dataset.label = o.label;
       if (o.hint) li.dataset.hint = o.hint;
+      if (multi) {
+        // Left of the label, in the first grid column (typeahead.css).
+        const tick = document.createElement("span");
+        tick.className = "typeahead-tick";
+        tick.setAttribute("aria-hidden", "true");
+        li.appendChild(tick);
+        markChecked(li, chosen.has(chosenKey(o.value, o.hint)));
+      }
       const text = document.createElement("span");
       text.className = "typeahead-label";
       text.appendChild(labelWithMark(o.label, filter));
@@ -524,8 +563,31 @@ export function initTypeahead(field) {
     }
   }
 
+  /* THE TICK. The typed text and the open list are exactly what the next
+   * tick needs, so neither is touched: the row flips, the page is told, and
+   * it answers through setChosen() once the archive has agreed - or puts the
+   * row back the way it was when it has not. The reset row, if there is
+   * one, is not a thing to tick and still goes through choose(). */
+  function toggleEntry(li) {
+    const value = li.dataset.value;
+    const hint = li.dataset.hint || "";
+    const checked = li.getAttribute("aria-checked") !== "true";
+    markChecked(li, checked);
+    field.dispatchEvent(new CustomEvent("typeahead:toggle", {
+      bubbles: true,
+      detail: {
+        value, label: li.dataset.label || value, hint, checked,
+        memberId: chosen.get(chosenKey(value, hint)) ?? null,
+      },
+    }));
+  }
+
   function chooseEntry(li, via) {
     if (!li) return;
+    if (multi && li.dataset.value) {
+      toggleEntry(li);
+      return;
+    }
     choose(li.dataset.value, li.dataset.label || li.textContent, false,
            li.dataset.hint || "", via);
   }
@@ -589,6 +651,11 @@ export function initTypeahead(field) {
       }
     } else if (e.key === "Tab") {
       close();
+    } else if (e.key === " " && multi && !popup.hidden && highlighted >= 0) {
+      // Space ticks the highlighted row, as it does in every checklist; a
+      // field without ticks keeps its space for the text.
+      e.preventDefault();
+      chooseEntry(entries()[highlighted], "enter");
     }
   });
 
@@ -647,6 +714,26 @@ export function initTypeahead(field) {
       if (controller) { controller.abort(); controller = null; }
       if (timer) { clearTimeout(timer); timer = null; }
       if (!popup.hidden) refresh(field.value, true);
+    },
+    /* Multi mode: the page says which rows stand for something it holds.
+     * `memberId` is what the page needs to take it away again; null unmarks.
+     * A row on screen changes at once, a row not yet drawn is right when it
+     * is drawn. */
+    setChosen(value, hint, memberId) {
+      const key = chosenKey(value, hint);
+      if (memberId === null || memberId === undefined) chosen.delete(key);
+      else chosen.set(key, memberId);
+      entries().forEach((li) => {
+        if (li.dataset.value === value && (li.dataset.hint || "") === (hint || "")) {
+          markChecked(li, chosen.has(key));
+        }
+      });
+    },
+    /* Drop what was fetched, so the next search asks again. The server
+     * leaves out what the page already holds, and what it holds has just
+     * changed - an answer from before the tick would offer it once more. */
+    forget() {
+      cache.clear();
     },
   };
   root._typeahead = api;

@@ -470,6 +470,19 @@
 }
 .leaflet-popup-content .popup-address { color: var(--muted); }
 
+/* THE FACTS OF A PIN, one per line: the name of the fact in the quiet
+ * colour, its value beside it, the names aligned so the eye runs down one
+ * column of names and one of values. */
+.leaflet-popup-content .popup-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.125rem 0.75rem;
+  margin: 0.5rem 0 0;
+}
+.leaflet-popup-content .popup-fact { display: contents; }
+.leaflet-popup-content .popup-fact dt { color: var(--muted); }
+.leaflet-popup-content .popup-fact dd { margin: 0; font-weight: 500; }
+
 /* ── Target sizes on these three views ────────────────────────────────── */
 /*
  * WCAG 2.5.8 wants 24 px in both directions for anything that is clicked.

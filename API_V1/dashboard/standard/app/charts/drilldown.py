@@ -240,6 +240,28 @@ def case_map(expr: sql.Composable, mapping: dict[str, str], default: str,
     return frag, params
 
 
+# A LOOKUP READS THE DAY THE ROW ARRIVED, NOT THE WHOLE ARCHIVE.
+#
+# Every table is partitioned on date_added, and only on that: a lookup by
+# (task, id) alone has no chunk to go to and walks every chunk of the
+# hypertable - on an archive of a few hundred chunks, a third of a second
+# per row, and a page of twenty rows with two lookups each is a quarter of
+# a minute. The collector writes one extraction result as one job: the
+# document, its entities and every row about them land within seconds of
+# each other (collector/app/store.py, store_task), so the row a lookup
+# wants is in the chunk of the row it is looked up for, or the one next to
+# it across midnight. Bounding the lookup to that day is what lets the
+# planner drop the other chunks before reading any, and it changes no
+# answer: a task that names the same entity in a document a week later
+# writes that entity again beside that document.
+def near(alias: str, other: str) -> sql.Composable:
+    """`other.date_added` within a day either side of `alias.date_added`."""
+    return sql.SQL(
+        "{o}.date_added BETWEEN {a}.date_added - interval '1 day' "
+        "AND {a}.date_added + interval '1 day'"
+    ).format(a=sql.Identifier(alias), o=sql.Identifier(other))
+
+
 def source_join(alias: str = "t", out: str = "src") -> sql.Composable:
     """The document a row came from, by (task, source id).
 
@@ -251,8 +273,9 @@ def source_join(alias: str = "t", out: str = "src") -> sql.Composable:
         " LEFT JOIN LATERAL (SELECT s.text_name, s.text_uri, s.text_summary "
         "FROM processed_data.sources s "
         "WHERE {idn} AND s.text_task_id = {a}.text_task_id "
-        "AND s.text_source_id = {a}.text_fk_source_id LIMIT 1) AS {o} ON true"
-    ).format(idn=sqlbuild.identity("s"), a=sql.Identifier(alias), o=sql.Identifier(out))
+        "AND s.text_source_id = {a}.text_fk_source_id AND {near} LIMIT 1) AS {o} ON true"
+    ).format(idn=sqlbuild.identity("s"), a=sql.Identifier(alias), o=sql.Identifier(out),
+             near=near(alias, "s"))
 
 
 def entity_join(alias: str, column: str, out: str) -> sql.Composable:
@@ -261,9 +284,9 @@ def entity_join(alias: str, column: str, out: str) -> sql.Composable:
     return sql.SQL(
         " LEFT JOIN LATERAL (SELECT e.text_name, e.text_type FROM processed_data.entities e "
         "WHERE {idn} AND e.text_task_id = {a}.text_task_id "
-        "AND e.text_entity_id = {a}.{c} LIMIT 1) AS {o} ON true"
+        "AND e.text_entity_id = {a}.{c} AND {near} LIMIT 1) AS {o} ON true"
     ).format(idn=sqlbuild.identity("e"), a=sql.Identifier(alias),
-             c=sql.Identifier(column), o=sql.Identifier(out))
+             c=sql.Identifier(column), o=sql.Identifier(out), near=near(alias, "e"))
 
 
 def scope_where(scope, alias: str, *, entity_column: str | None = None,
@@ -365,12 +388,19 @@ _SIDES = (
 SIDE_ROLE = sql.SQL("side.role")
 
 
-def _sides(plan: Plan) -> sql.Composable:
-    if plan.table != "connections":
+def sides(table: str, alias: str, both_directions: bool) -> sql.Composable:
+    """The `side` lateral for the connections table, nothing for any other.
+    Public because a listing that has no chart behind it (app/charts/
+    listing.py) still reads a connection from one end."""
+    if table != "connections":
         return sql.SQL("")
     return sql.SQL(_SIDES).format(
-        a=sql.Identifier(plan.alias),
-        both=sql.SQL("TRUE" if plan.both_directions else "FALSE"))
+        a=sql.Identifier(alias),
+        both=sql.SQL("TRUE" if both_directions else "FALSE"))
+
+
+def _sides(plan: Plan) -> sql.Composable:
+    return sides(plan.table, plan.alias, plan.both_directions)
 
 
 def _from(plan: Plan) -> sql.Composable:
@@ -1102,6 +1132,11 @@ def shape_row(table: str, row: dict[str, Any]) -> dict[str, Any]:
         # is the third.
         "link": {"uri": uri, "domain": host_of(uri),
                  "title": readable_title(str(row.get("source_name") or ""), uri)},
+        # THE DOCUMENT'S KEY, for a machine: a source id is unique within
+        # its task, so both travel. The Tables view opens the document with
+        # every row the archive read out of it under this pair; nothing on
+        # screen shows either half.
+        "source": {"task": str(row.get("dd_task") or ""), "id": str(row.get("dd_source_id") or "")},
         "entity": entity,
         "cells": {c.key: cells.get(c.key, [_part("")]) for c in columns_for(table)},
     }
@@ -1165,11 +1200,12 @@ def _event_entities_join(alias: str, out: str = "ddev") -> sql.Composable:
         " LEFT JOIN LATERAL (SELECT array_agg(DISTINCT dde.text_name) AS names "
         "FROM processed_data.event_entities ddee "
         "JOIN processed_data.entities dde ON {idn_e} AND dde.text_task_id = ddee.text_task_id "
-        "AND dde.text_entity_id = ddee.text_fk_entity_id "
+        "AND dde.text_entity_id = ddee.text_fk_entity_id AND {near_e} "
         "WHERE {idn} AND ddee.text_task_id = {a}.text_task_id "
-        "AND ddee.bigint_fk_event_id = {a}.bigint_id) AS {o} ON true"
+        "AND ddee.bigint_fk_event_id = {a}.bigint_id AND {near}) AS {o} ON true"
     ).format(idn=sqlbuild.identity("ddee"), idn_e=sqlbuild.identity("dde"),
-             a=sql.Identifier(alias), o=sql.Identifier(out))
+             a=sql.Identifier(alias), o=sql.Identifier(out),
+             near=near(alias, "ddee"), near_e=near(alias, "dde"))
 
 
 def _row_extra_joins(table: str, alias: str) -> sql.Composable:
@@ -1201,6 +1237,11 @@ def _row_extra_columns(table: str, alias: str) -> sql.Composable:
              if table == "sources" else
              sql.SQL("ddsrc.text_name AS source_name, ddsrc.text_uri AS source_uri, "
                      "ddsrc.text_summary AS source_summary")]
+    # The document's key (shape_row: `source`). `dd_` so that it cannot
+    # collide with a table's own `source_id` column.
+    parts.append(sql.SQL("{a}.text_task_id AS dd_task, {a}.{c} AS dd_source_id, "
+                         "{a}.date_added AS dd_added").format(
+        a=sql.Identifier(alias), c=sql.Identifier(sqlbuild.source_id_column(table))))
     if table in ("locations", "ratings", "attributes", "market_insights"):
         parts.append(sql.SQL("ddent.text_name AS entity_name"))
     if table == "connections":
@@ -1230,7 +1271,7 @@ def _point_where(plan: Plan, kind: str, window: Window, key: dict[str, Any],
         [sql.SQL("({p})").format(p=p) for p in parts]), params
 
 
-def _side_columns(plan: Plan) -> sql.Composable:
+def side_columns(table: str) -> sql.Composable:
     """The end of the connection this row is read from, carried out of the
     page-sized inner query.
 
@@ -1238,10 +1279,46 @@ def _side_columns(plan: Plan) -> sql.Composable:
     `t` - so without this the listing would show the parent's role under
     every bar, including the bars a child's role was counted into.
     """
-    if plan.table != "connections":
+    if table != "connections":
         return sql.SQL("")
     return sql.SQL(", side.role AS side_role, side.back AS side_back, "
                    "side.ref_id AS side_ref, side.tgt_id AS side_tgt")
+
+
+def _side_columns(plan: Plan) -> sql.Composable:
+    return side_columns(plan.table)
+
+
+def page_rows(table: str, alias: str, inner: sql.Composable,
+              with_total: bool = True, newest_first: bool = True,
+              order_column: str = "row_date") -> sql.Composable:
+    """THE PAGE IS CUT BEFORE THE NAMES ARE LOOKED UP, and that is the whole
+    shape of every listing.
+
+    Every row of a listing carries its document's name and address, and
+    each of those is a lookup into a hypertable of hundreds of chunks
+    (_row_extra_joins). Joined in the same SELECT as the LIMIT they run
+    for every row the filters matched, not for the twenty on screen: one
+    bar of a whole-project chart is 881 rows, and the page took minutes.
+
+    So `inner` is the caller's own FROM and WHERE, ordered and cut to the
+    page - `SELECT {alias}.*, [the side columns,] {timeline} AS row_date
+    [, count(*) OVER () AS dd_total] ... LIMIT ... OFFSET ...` - and the
+    per-row lookups hang off THAT. It is aliased back to the caller's
+    alias, so the columns and joins below read the same as inside. The
+    outer ORDER BY repeats the inner one, because a join does not promise
+    to keep an order - `order_column` names the column the inner query
+    ordered by, when it is not the row's own date.
+    """
+    a = sql.Identifier(alias)
+    direction = sql.SQL("DESC" if newest_first else "ASC")
+    return sql.SQL(
+        "SELECT {cols}, {extra}, {a}.row_date{total_out} FROM ({inner}) AS {a}{j} "
+        "ORDER BY {a}.{o} {d}, {a}.bigint_id {d}"
+    ).format(cols=sql.SQL(_ROW_COLUMNS.get(table, "{a}.text_name AS name")).format(a=a),
+             extra=_row_extra_columns(table, alias), a=a, d=direction, o=sql.Identifier(order_column),
+             total_out=sql.SQL(", {a}.dd_total").format(a=a) if with_total else sql.SQL(""),
+             inner=inner, j=_row_extra_joins(table, alias))
 
 
 def rows_statement(plan: Plan, kind: str, scope, window: Window,
@@ -1267,38 +1344,20 @@ def rows_statement(plan: Plan, kind: str, scope, window: Window,
     point asks for the number with count_statement() instead: the same
     predicates without the per-row joins, which took 0.03 s for the same bar.
     """
-    table = plan.table
     where, params = _point_where(plan, kind, window, key, dataset_id, allowed_datasets)
     timeline = sqlbuild.timeline(plan.table, plan.alias)
     total = sql.SQL(", count(*) OVER () AS dd_total") if with_total else sql.SQL("")
     alias = sql.Identifier(plan.alias)
-    # THE PAGE IS CUT BEFORE THE NAMES ARE LOOKED UP, and that is the whole
-    # shape of this statement.
-    #
-    # Every row of a listing carries its document's name and address, and
-    # each of those is a lookup into a hypertable of hundreds of chunks
-    # (_row_extra_joins). Joined in the same SELECT as the LIMIT they ran
-    # for every row the filters matched, not for the twenty on screen: one
-    # bar of a whole-project chart is 881 rows, and the page took minutes.
-    #
-    # So the inner query is the chart's own FROM and WHERE, ordered and cut
-    # to the page; the per-row lookups hang off THAT. The chart's own joins
-    # (plan.joins) stay inside, because some charts group - and therefore
-    # filter - on them. It is aliased back to the plan's alias, so the
-    # columns and joins below read the same as they always did.
+    # The chart's own FROM and WHERE, ordered and cut to the page; the
+    # per-row lookups hang off that (page_rows says why). The chart's own
+    # joins (plan.joins) stay inside, because some charts group - and
+    # therefore filter - on them.
     inner = sql.SQL(
         "SELECT {a}.*{side}, {tl} AS row_date{total} {f} WHERE {w} "
         "ORDER BY {tl} DESC, {a}.bigint_id DESC LIMIT %(dd_limit)s OFFSET %(dd_offset)s"
     ).format(a=alias, side=_side_columns(plan), tl=timeline, total=total,
              f=_from(plan), w=where)
-    body = sql.SQL(
-        "SELECT {cols}, {extra}, {a}.row_date{total_out} FROM ({inner}) AS {a}{j} "
-        "ORDER BY {a}.row_date DESC, {a}.bigint_id DESC"
-    ).format(cols=sql.SQL(_ROW_COLUMNS.get(table, "{a}.text_name AS name")).format(a=alias),
-             extra=_row_extra_columns(table, plan.alias), a=alias,
-             total_out=sql.SQL(", {a}.dd_total").format(a=alias) if with_total else sql.SQL(""),
-             inner=inner, j=_row_extra_joins(table, plan.alias))
-    return _with(scope, [], body), params
+    return _with(scope, [], page_rows(plan.table, plan.alias, inner, with_total)), params
 
 
 def count_statement(plan: Plan, kind: str, scope, window: Window,

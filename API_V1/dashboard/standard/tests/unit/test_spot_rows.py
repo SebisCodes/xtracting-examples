@@ -255,7 +255,7 @@ def row(**over):
 
 def test_the_columns_are_the_ones_the_shell_does_not_draw_itself():
     """The running number, the Source column and the Entity column come from
-    the dialog itself (static/js/drilldown.js: drawHead); these four are what
+    the dialog itself (static/js/rows.js: drawHead); these four are what
     this listing adds."""
     assert [c["key"] for c in spots.columns_json()] == [
         "count", "kinds", "address", "newest"]

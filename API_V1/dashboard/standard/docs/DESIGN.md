@@ -96,14 +96,14 @@ environment and nowhere else.
 
 ## What it does
 
-Eleven views, all of them bound to the project and language in the top bar, all
+Twelve views, all of them bound to the project and language in the top bar, all
 of them printable and exportable.
 
 **The top bar also carries a reading.** Beside Project and Language stand
 **Perspective** and **Show only**: a document is judged once per perspective a
 customer watches ("for an Investor this filing is critical, for a Sustainable
-Customer it is beside the point"), and choosing one narrows Query, Events,
-Diagrams, the Graph, the Map and the Heatmap to what came from documents
+Customer it is beside the point"), and choosing one narrows Query, Tables,
+Events, Diagrams, the Graph, the Map and the Heatmap to what came from documents
 carrying, *for that perspective*, the chosen importance or a higher one.
 Perspective starts on **All**, which is no filter; *Show only* is greyed out
 until a perspective is chosen and then starts at **Low Importance and above**.
@@ -134,6 +134,7 @@ unfiltered for that label instead of silently emptying the view.
 |---|---|
 | Dashboard | How much of what arrived, per period; the activity feed; the latest events |
 | Query | Search by term, by address or by a circle around a place; results with a mini-map |
+| Tables | The archive as tables, one per kind - the same eight tabs as Diagrams. Each is searched by name and by type, newest first, or sorted by how often one name and type occur (most or fewest), where a row is one name and opens into its rows. **Show buckets** puts the buckets of that kind first, each opening into the documents that hold a member, newest first and more as you scroll. Every row links to its document's **Rows**: the Sources tab with that one document, opened - every entity, connection, location, event, rating, attribute and market insight the archive read out of it, one table per kind |
 | Events | Events by entity or by type, with the entities each was about |
 | Diagrams | Six pages (Summary, Entity, Source, Location, Market Insights, Events), eight tabs on each, 43 charts in all. Each page searches its own kind of thing on TWO axes, chosen by one switch in front of the field: **Object** is one thing (an entity, a document or its host, an address, a topic, one event) and **Type** is the whole class ("Company" is every company). Both resolve to the same entity set, so all eight tabs are drawn from either, and the line under the box says which axis answered and how big it is. The Summary's magnifier searches everything at once - an entity, a bucket, a document, a host, a place, a topic or an event type - and an empty box there is the whole project; it has no type axis, because it is already everything. Every **per period** chart carries a second axis at the right: a line of how many sources the archive evaluated in each period, over the whole project, so a bar can be read against the reporting it came out of - a rise in ratings is either more reporting about the subject or simply more reporting, and only the line tells the two apart. Click a bar and the rows behind that point open in a dialog. A card with more bars than its plot has room for draws no labels and says so; **Enlarge** opens it at one row per category, and a click inside that opens the rows as a second dialog over it |
 | Map | Entities that have coordinates, their connections drawn between them. The box reads its term on TWO axes, like the Diagrams pages: **Object** is an entity or a bucket, **Type** is an EVENT TYPE, and then the map holds every entity the events of that kind are about. **Save image** writes what is on screen to a PNG - with the colour key and the map credit in it, and without the controls |
@@ -146,7 +147,7 @@ unfiltered for that label instead of silently emptying the view.
 
 Plus one page that is not in the top bar, reached from the Watchlist because
 that is the only place a project is a question anybody is asking - and because
-eleven buttons already fill 974 of the 1024 px the bar is laid out for:
+twelve buttons already fill the 1024 px the bar is laid out for:
 
 | Page | What is on it |
 |---|---|
@@ -364,6 +365,38 @@ looks a bucket up by kind, finds no entity bucket of that name, falls through
 to the literal term and maps a Team called Fire in Springfield while the four
 event types are dropped without a word. One named object may not mean two
 different things on two views.
+
+**A member is ticked, not picked.** The list under the Buckets page's member
+field is a checklist: a tick adds the member the moment it is pressed, the
+typed text and the open list stay as they are, and a second tick removes it
+again. Picking closes a list and empties a field - the right shape for a
+search box, where one answer is wanted - and the wrong one for a field
+whose whole purpose is to take several: with picking, every member cost a
+retyped search. The list does not re-fetch on a tick, so a ticked row stays
+in view, ticked; the next search asks the server again, and the server
+offers no member the bucket already holds. Both are the same widget
+(`static/js/typeahead.js`); the checklist is opt-in per field, so the
+search boxes keep their contract.
+
+**The row table is written once and drawn in two places.** The columns, the
+counter, the paging and the cell that opens live in `static/js/rows.js`;
+the drilldown dialog mounts that in its body and the Tables view mounts it
+on the page. A table of the same rows drawn by two modules would be two
+answers to "what is a row" - one of them stale on the day a column changes.
+What differs is only where the pieces stand: in the dialog the counter and
+the header stick to the body, which is the one scroller; on the page the
+rows sit in a card like the Colours page's tables, the page scrolls, the
+counter stands between the buckets' card and the rows' card, and the
+header is a row like any other, because a sticky header needs the one
+scroller the dialog body is.
+
+**A popup on the map opens rows, and stays a popup.** A pin's address and
+every sentence of a line's popup are buttons: the address opens the location
+rows behind that pin, a sentence opens the connection rows it summarises,
+read from the side the sentence is written from. The popup itself is kept -
+it is the reader's orientation, with the links to that entity's own Diagrams
+and Graph - and the drilldown is the same dialog every chart opens, so what
+is behind a pin looks like what is behind a bar.
 
 **A document is never called by its identifier.** Measured on a real archive
 rather than guessed: `sources.text_name` is `src_1416664` in some rows and an

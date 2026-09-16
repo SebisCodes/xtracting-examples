@@ -124,7 +124,7 @@ def test_chart_registry_is_clean():
 # in the product: an up arrow in the crawler's link picker is a caret, not a
 # statement about a market.
 VALENCE_VIEWS = ("diagrams.html", "dashboard.html", "events.html")
-VALENCE_SCRIPTS = ("charts.js", "diagrams.js", "drilldown.js", "legend.js", "dashboard.js")
+VALENCE_SCRIPTS = ("charts.js", "diagrams.js", "drilldown.js", "rows.js", "legend.js", "dashboard.js")
 
 
 def test_the_glyph_scanner_bites():

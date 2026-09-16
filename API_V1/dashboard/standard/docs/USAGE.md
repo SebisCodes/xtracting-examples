@@ -187,6 +187,31 @@ the next twenty load as you scroll to the end of them, or on **Load more**.
 Press the cell again to fold them away - they stay loaded, so a second look
 costs nothing.
 
+## The Tables view
+
+Eight tabs, the same eight the Diagrams pages have, and each one a table of
+that kind: documents, ratings, entities, connections, locations, market
+insights, attributes, events. **Name** and **Type** narrow it; on the Sources
+tab the name is the document's title or host. **Sort** is *Newest* or
+*Oldest* - by the moment the archive received the row, which is the order
+the archive is stored in and the one it answers fastest; the date in the
+row stays the row's own - or *Most rows* and *Fewest rows*, where a row is one name and type
+and says how many rows carry it - press the count to list them under it. A
+connection is read from each of its ends, so "Foxconn is a Supplier of Apple
+Inc." and "Apple Inc. is a Customer of Foxconn" are two rows of one tie.
+
+**Show buckets** lists the buckets of the tab's kind first - a document type
+bucket on Sources, entity and entity type buckets on Entities, colour groups
+on Connections - each one opening into the documents that hold one of its
+members, the newest first, more as you scroll.
+
+Every row of every table, and every row of a drilldown dialog, carries
+**Rows** beside its document: it opens the Sources tab with that one
+document, already opened - one table per kind of everything the archive
+read out of it, each with its count and the newest first. A document on the
+Sources tab opens the same way from its own row. *Show all documents* clears
+the one document again.
+
 ## Settings search only when you press Search
 
 On every view with a search form - Map, Heatmap, Graph, Events, Diagrams,
@@ -209,7 +234,13 @@ its head and says "searched" in its row.
 One name is one entity. The extraction hands the same company several ids
 over time, and the map folds them into one pin and one line per partner,
 with their connections added up; the popup says how many archive entries
-went into a pin. A line is drawn in every colour its connection types have,
+went into a pin. **The popup opens rows**: press the address in a pin's
+popup and the location rows behind that pin open in the drilldown dialog;
+press a sentence in a line's popup - "Foxconn is a Supplier of Apple Inc."
+- and the connection rows that sentence adds up open, read from Foxconn's
+side; press the count above the sentences and every connection of the pair
+opens. The small maps on Query and Diagrams do the same. A line is drawn in
+every colour its connection types have,
 each along the share of its length that type's count is of the pair's total
 - a pair that is mostly Supplier and partly Competitor is mostly teal and
 partly pink. The swatch in the row beside the map is the same bar.
@@ -263,6 +294,11 @@ Inc." as one entity, "Company" and "Unternehmen" as one type, "t" and "tonne"
 as one unit. A bucket has a kind, and every view resolves a typed term
 through the buckets of its kind before it searches. They are rows in the
 database, so a bucket a colleague made is a bucket everybody searches with.
+Members are **ticked**: type into the member field, tick every row you want,
+and each is a member the moment it is ticked; the field and the list stay,
+so the next tick costs no second search. A ticked row ticked again is
+removed. A name the list does not offer is typed and confirmed with its
+type and *Add member*.
 
 **Colours** decide which colour a connection type is drawn in, on the Map and
 in the Graph. Eleven groups; every type in the archive is a row, in every

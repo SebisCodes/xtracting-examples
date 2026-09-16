@@ -231,7 +231,7 @@ VIEW_DIR = __import__("pathlib").Path(__file__).resolve().parents[2] / "app" / "
 HEX = __import__("re").compile(r"#[0-9a-fA-F]{6}\b")
 
 
-@pytest.mark.parametrize("name", ["js/drilldown.js", "js/charts.js", "js/diagrams.js"])
+@pytest.mark.parametrize("name", ["js/drilldown.js", "js/rows.js", "js/charts.js", "js/diagrams.js"])
 def test_no_colour_is_written_into_a_view(name):
     """The three scales live in app.css and reach a view through
     js/palette.js. A hex typed into a view is the second copy of the design

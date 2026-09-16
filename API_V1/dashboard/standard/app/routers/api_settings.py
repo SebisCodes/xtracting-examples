@@ -85,8 +85,9 @@ from .. import colours as colour_module
 from ..colours import contrast_ratio, get_resolver, is_valid_hex, suggest_group, text_colour_for
 from ..context import ContextDep
 from ..db import Database, get_db
-from ..scope import (BUCKET_KINDS, COLOUR_GROUP_KIND, KIND_VALUES_SQL, bucket_terms,
-                     find_bucket, member_index, member_match, normalise_terms)
+from ..scope import (BUCKET_KINDS, COLOUR_GROUP_KIND, KIND_VALUES_SQL, SUBSTRING_KINDS,
+                     bucket_terms, find_bucket, member_index, member_match, normalise_terms,
+                     value_match)
 from ..sqlbuild import like_substring
 
 log = logging.getLogger(__name__)
@@ -171,8 +172,10 @@ KIND_INFO: dict[str, dict[str, Any]] = {
         "table": "processed_data.locations", "column": "text_address",
         "identity": "(t.text_task_id, t.text_fk_entity_id)", "counts": "locations",
         # A place is the one kind whose members are matched as a substring:
-        # "Rotterdam" has to reach "Rotterdam, Netherlands", exactly as it
-        # does when it is typed into the Query page's place box.
+        # "Rotterdam" has to reach "Rotterdam, Netherlands". app/scope.py's
+        # SUBSTRING_KINDS is what decides it (value_match); the flag here
+        # says so beside the kind, and the assertion below keeps the two in
+        # step.
         "substring": True,
     },
     "location_type": {
@@ -227,6 +230,8 @@ CONNECTION_TYPE_NOTE = (
 # what the page shows about it; a kind in one and not the other is a bucket
 # that can be made and never applied, or applied and never made.
 assert tuple(KIND_INFO) == BUCKET_KINDS, "KIND_INFO and scope.BUCKET_KINDS disagree"
+assert {k for k, v in KIND_INFO.items() if v.get("substring")} == set(SUBSTRING_KINDS), (
+    "KIND_INFO and scope.SUBSTRING_KINDS disagree about which kind is matched as a substring")
 
 
 def _kind_param(value: Any) -> str | None:
@@ -513,48 +518,49 @@ def delete_member(bucket_id: int, member_id: int, db: Database = Depends(get_db)
 #                  nothing is a typo, and a member without a type usually
 #                  matches more than its author expected.
 
+# ONE STATEMENT FOR THE BUCKET AND EVERY MEMBER OF IT.
+#
+# The page shows two answers to "what does this bucket match": the total,
+# and one number per member, so a member that matches nothing is visible.
+# Asked one statement per member they are 1 + N scans of a table that holds
+# millions of rows on a grown archive - tens of seconds for one card, and a
+# page of seven cards more than the read pool holds. So the members ride
+# into one statement as a VALUES list with their position (bucket_terms
+# ordinal), the matching rows are read ONCE into a CTE, and two GROUP BYs
+# read that CTE: the total over the whole set, and the per-member figures
+# through a join back to the members that hit each row.
+#
 # GROUPING SETS gives the per-language rows AND the total in one pass: the
 # total is not the sum of the languages (an entity record is one id pair in
 # every language it exists in) and it is not their maximum either, so it has
-# to be counted over the whole set rather than derived from the rows.
-_PER_LANGUAGE = """
-    SELECT e.text_language AS language,
-           count(DISTINCT (e.text_task_id, e.text_entity_id)) AS entities,
+# to be counted over the whole set rather than derived from the rows. A
+# member's own rows can be hit by another member as well ("Company" and
+# "Unternehmen" are one entity in two languages); the total counts the pair
+# once, the per-member figures each count it for their member, and that is
+# why the page does not add the members up.
+#
+# The result rows carry `member`: NULL for the total, the member's ordinal
+# for its own figures.
+_PER_MEMBER_ENTITIES = """
+    WITH hit AS (
+        SELECT DISTINCT e.text_task_id AS task_id, e.text_entity_id AS id, bt.ord AS member
+          FROM processed_data.entities e JOIN {bt} ON {m}
+         WHERE e.text_project = %(project)s
+           AND e.text_entity_id IS NOT NULL AND e.text_entity_id <> ''),
+    rows AS (
+        SELECT e.text_task_id AS task_id, e.text_entity_id AS id, e.text_language AS language
+          FROM processed_data.entities e
+         WHERE e.text_project = %(project)s
+           AND (e.text_task_id, e.text_entity_id) IN (SELECT task_id, id FROM hit))
+    SELECT NULL::int AS member, r.language, count(DISTINCT (r.task_id, r.id)) AS entities,
            count(*) AS records
-      FROM processed_data.entities e
-     WHERE e.text_project = %(project)s
-       AND (e.text_task_id, e.text_entity_id) IN (SELECT task_id, id FROM ent)
-     GROUP BY GROUPING SETS ((e.text_language), ())
+      FROM rows r
+     GROUP BY GROUPING SETS ((r.language), ())
+    UNION ALL
+    SELECT h.member, r.language, count(DISTINCT (r.task_id, r.id)), count(*)
+      FROM rows r JOIN hit h ON h.task_id = r.task_id AND h.id = r.id
+     GROUP BY GROUPING SETS ((h.member, r.language), (h.member))
 """
-
-
-def _ent_cte(terms: sql.Composable) -> sql.Composable:
-    return sql.SQL(
-        "WITH ent AS (SELECT DISTINCT e.text_task_id AS task_id, e.text_entity_id AS id "
-        "FROM processed_data.entities e JOIN {bt} ON {m} "
-        "WHERE e.text_project = %(project)s AND e.text_entity_id IS NOT NULL "
-        "AND e.text_entity_id <> '') ").format(bt=terms, m=member_match("e", "bt"))
-
-
-def _matches(conn: psycopg.Connection, project: str, language: str,
-             members: list[tuple[str, str | None]]) -> dict[str, Any]:
-    if not normalise_terms(members):
-        return {"entities": 0, "languages": []}
-    terms, params = bucket_terms(members)
-    stmt = _ent_cte(terms) + sql.SQL(_PER_LANGUAGE)
-    rows = [dict(r) for r in conn.execute(stmt, {**params, "project": project}).fetchall()]
-    return _counts(rows, language)
-
-
-def _counts(rows: list[dict[str, Any]], language: str) -> dict[str, Any]:
-    total = next((r for r in rows if r["language"] is None), None)
-    languages = [{"language": r["language"], "entities": int(r["entities"]),
-                  "records": int(r["records"])} for r in rows if r["language"] is not None]
-    # The language on screen first: it is the one the numbers below the
-    # bucket are about, and the others are the cross-check.
-    languages.sort(key=lambda row: (row["language"] != language, row["language"]))
-    return {"entities": int(total["entities"]) if total else 0, "languages": languages}
-
 
 # THE SAME COUNT FOR EVERY OTHER KIND, AND WHY IT IS PER LANGUAGE.
 #
@@ -568,45 +574,82 @@ def _counts(rows: list[dict[str, Any]], language: str) -> dict[str, Any]:
 # `entities` counts the kind's own identity (an entity, a document, a
 # location, an event) so a thing named twice in one task is not counted
 # twice; `records` counts the rows, which is where the languages differ.
-_PER_LANGUAGE_VALUES = """
-    SELECT t.text_language AS language,
-           count(DISTINCT {identity}) AS entities,
-           count(*) AS records
-      FROM {table} t
-     WHERE t.text_project = %(project)s AND {match}
-     GROUP BY GROUPING SETS ((t.text_language), ())
+# The members are the values themselves, joined back by the same rule the
+# WHERE matched them with (scope.value_match: whole word, or a substring of
+# a place).
+_PER_MEMBER_VALUES = """
+    WITH v AS (SELECT val, ord FROM unnest(%(vals)s::text[]) WITH ORDINALITY AS u(val, ord)),
+    rows AS (
+        SELECT {identity} AS ident, t.text_language AS language, lower(t.{column}) AS value
+          FROM {table} t
+         WHERE t.text_project = %(project)s AND {match})
+    SELECT NULL::int AS member, r.language, count(DISTINCT r.ident) AS entities, count(*) AS records
+      FROM rows r
+     GROUP BY GROUPING SETS ((r.language), ())
+    UNION ALL
+    SELECT (v.ord - 1)::int, r.language, count(DISTINCT r.ident), count(*)
+      FROM rows r JOIN v ON {hit}
+     GROUP BY GROUPING SETS ((v.ord, r.language), (v.ord))
 """
 
 
-def _values_match(kind: str, column: str) -> sql.Composable:
-    """Exact on a value, substring on a place. "Rotterdam" has to reach
-    "Rotterdam, Netherlands" here for the same reason it does in a search."""
-    if KIND_INFO[kind].get("substring"):
-        return sql.SQL("EXISTS (SELECT 1 FROM unnest(%(vals)s::text[]) AS v "
-                       "WHERE position(v IN lower(t.{c})) > 0)").format(c=sql.Identifier(column))
-    return sql.SQL("lower(t.{c}) = ANY(%(vals)s)").format(c=sql.Identifier(column))
+def _counts(rows: list[dict[str, Any]], language: str) -> dict[str, Any]:
+    total = next((r for r in rows if r["language"] is None), None)
+    languages = [{"language": r["language"], "entities": int(r["entities"]),
+                  "records": int(r["records"])} for r in rows if r["language"] is not None]
+    # The language on screen first: it is the one the numbers below the
+    # bucket are about, and the others are the cross-check.
+    languages.sort(key=lambda row: (row["language"] != language, row["language"]))
+    return {"entities": int(total["entities"]) if total else 0, "languages": languages}
 
 
-def _matches_values(conn: psycopg.Connection, project: str, language: str, kind: str,
-                    values: list[str]) -> dict[str, Any]:
-    wanted = sorted({(v or "").strip().lower() for v in values if (v or "").strip()})
-    if not wanted:
-        return {"entities": 0, "languages": []}
-    info = KIND_INFO[kind]
-    stmt = sql.SQL(_PER_LANGUAGE_VALUES).format(
-        table=sql.SQL(info["table"]), identity=sql.SQL(info["identity"]),
-        match=_values_match(kind, info["column"]))
-    rows = [dict(r) for r in conn.execute(stmt, {"project": project, "vals": wanted}).fetchall()]
-    return _counts(rows, language)
+def _split_members(rows: list[dict[str, Any]], language: str,
+                   count: int) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """The total and one answer per member ordinal, out of the rows of one
+    per-member statement. A member with no row matched nothing."""
+    total = _counts([r for r in rows if r["member"] is None], language)
+    per_member = [_counts([r for r in rows if r["member"] == i], language) for i in range(count)]
+    return total, per_member
 
 
-def _matches_kind(conn: psycopg.Connection, project: str, language: str, kind: str,
-                  members: list[tuple[str, str | None]]) -> dict[str, Any]:
-    """What a bucket of any kind matches. The entity kind keeps its own
-    statement, because a member there is a name AND a type."""
+def _matches_members(conn: psycopg.Connection, project: str, language: str, kind: str,
+                     members: list[tuple[str, str | None]]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """What a bucket matches, and what each member of it matches, in one
+    statement. The entity kind matches a name AND a type; every other kind
+    matches values. Returns the total and one answer per given member, in
+    the members' order."""
+    empty = {"entities": 0, "languages": []}
     if kind == "entity":
-        return _matches(conn, project, language, members)
-    return _matches_values(conn, project, language, kind, [name for name, _ in members])
+        terms = normalise_terms(members)
+        if not terms:
+            return empty, [empty for _ in members]
+        frag, params = bucket_terms(members, ordinal=True)
+        stmt = sql.SQL(_PER_MEMBER_ENTITIES).format(bt=frag, m=member_match("e", "bt"))
+        rows = [dict(r) for r in conn.execute(stmt, {**params, "project": project}).fetchall()]
+        total, by_term = _split_members(rows, language, len(terms))
+        index = {term: i for i, term in enumerate(terms)}
+        keys = [normalise_terms([m]) for m in members]
+    else:
+        values = [(name or "").strip().lower() for name, _ in members]
+        wanted = sorted({v for v in values if v})
+        if not wanted:
+            return empty, [empty for _ in members]
+        info = KIND_INFO[kind]
+        column = info["column"]
+        hit = (sql.SQL("position(v.val IN r.value) > 0") if kind in SUBSTRING_KINDS
+               else sql.SQL("r.value = v.val"))
+        stmt = sql.SQL(_PER_MEMBER_VALUES).format(
+            table=sql.SQL(info["table"]), identity=sql.SQL(info["identity"]),
+            column=sql.Identifier(column), match=value_match(kind, "t", column), hit=hit)
+        rows = [dict(r) for r in conn.execute(stmt, {"project": project, "vals": wanted}).fetchall()]
+        total, by_term = _split_members(rows, language, len(wanted))
+        index = {v: i for i, v in enumerate(wanted)}
+        keys = [[v] if v else [] for v in values]
+    per_member = []
+    for key in keys:
+        i = index.get(key[0]) if key else None
+        per_member.append(by_term[i] if i is not None else empty)
+    return total, per_member
 
 
 @router.get("/buckets/resolve")
@@ -649,21 +692,19 @@ def resolve_bucket(ctx: ContextDep, db: Database = Depends(get_db),
 
         of_kind = bucket.get("kind") or "entity"
         pairs = [(m["name"], m["type"] or None) for m in bucket["members"]]
-        totals = _matches_kind(conn, ctx.project, ctx.language, of_kind, pairs)
-        # One member at a time, so a member that matches nothing is visible.
-        # A bucket holds a handful of members; this is a handful of small
-        # queries against an indexed name, not a scan per row.
+        # The total and every member in one statement (_PER_MEMBER_*), so a
+        # member that matches nothing is visible and the archive is read
+        # once, not once per member.
         #
         # The per-member numbers deliberately do NOT add up to the total: two
         # members can name the same thing ("Company" and "Unternehmen" are one
         # entity in two languages), and the total counts it once. That is the
         # whole promise of a bucket, so the page says it rather than hiding a
         # subtraction.
-        per_member = []
-        for name, typ in pairs:
-            one = _matches_kind(conn, ctx.project, ctx.language, of_kind, [(name, typ)])
-            per_member.append({"name": name, "type": typ or "", "entities": one["entities"],
-                               "languages": one["languages"]})
+        totals, each = _matches_members(conn, ctx.project, ctx.language, of_kind, pairs)
+        per_member = [{"name": name, "type": typ or "", "entities": one["entities"],
+                       "languages": one["languages"]}
+                      for (name, typ), one in zip(pairs, each)]
 
     info = KIND_INFO.get(of_kind, KIND_INFO["entity"])
     return {"bucket": {k: v for k, v in bucket.items() if k != "members"},

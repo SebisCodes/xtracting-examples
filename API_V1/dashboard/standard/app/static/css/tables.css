@@ -1,0 +1,191 @@
+/* ==========================================================================
+ *  The Tables view.
+ *
+ *  The table itself is dressed by css/drilldown.css - the same table the
+ *  drilldown dialog draws, on a page - and the strip, the search row and
+ *  the tab buttons by app.css and the rules Diagrams shares through
+ *  `.tabs-row`, `.strip-label` and `.strip-hint` (css/diagrams.css is NOT
+ *  loaded here; the few of its rules this page needs are repeated below,
+ *  because a page that loads a 900-line sheet for three rules loads the
+ *  chart grid with them). This file says only where this page differs.
+ * ========================================================================== */
+
+/* ── The strip ────────────────────────────────────────────────────────── */
+
+.tables-tabs-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.tables-tabs-row .tabs { flex: 1 1 26rem; }
+/* The tabs are the primary control of this page: they get the full 44 px
+ * even though app.css already gives every tab a comfortable target. */
+.tables-tabs-row [role="tab"] { min-height: var(--control-h); }
+
+.strip-label {
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+}
+/* THE ⓘ BESIDE THE STRIP LABEL, the size of the label beside it, so it costs
+ * no height. The same mark Diagrams draws in front of its two strips. */
+.strip-hint {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 1.125rem;
+  height: 1.125rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-style: italic;
+  font-weight: 700;
+  line-height: 1;
+  cursor: help;
+}
+.strip-hint:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ── The search row ───────────────────────────────────────────────────── */
+
+/* Two text fields take the width; the sort and the checkbox take what they
+ * need. `.field--fixed` is the toolbar's own word for a cell that does not
+ * grow (query.html uses it for the switch). */
+.tables-search-row .field--fixed { flex: 0 1 auto; }
+/* THE CHECKBOX SITS ON THE CONTROL LINE, under its own label, like every
+ * other cell of the row: `.check` is 44 px tall, so its top edge is the
+ * select's top edge beside it. The 0.5rem of right padding `.check` carries
+ * is what keeps its text off the next cell. */
+.tables-search-row .field--fixed .check { padding-left: 0.125rem; }
+
+/* What the page is doing. The same band Diagrams draws between its strip
+ * and its cards, in the same place. */
+.grid-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid var(--accent);
+  background: var(--accent-tint);
+  color: var(--text);
+}
+.grid-status.is-error {
+  border-left-color: var(--error);
+  background: var(--error-tint);
+}
+.grid-status .button { flex: 0 0 auto; }
+
+/* ── The two cards ────────────────────────────────────────────────────── */
+
+/* THE BUCKETS IN ONE CARD, THE ROWS IN ANOTHER, each with a title and a
+ * count (app.css .card, .card-header), the way the Colours page holds its
+ * two tables. */
+.tables-card { margin-top: var(--gap); }
+
+/* THE ROWS SCROLL IN A BOX A LITTLE SHORTER THAN THE WINDOW. The box is the
+ * one scroller for the rows, in both axes, so the table's header sticks to
+ * its top (css/drilldown.css) and four hundred rows go by under it while
+ * the card's title and the counter over the card stay where they are. Its
+ * height is set by static/js/tables.js (fitBox) from what stands above and
+ * below it in the card; the value here is the fallback for a page rendered
+ * without that module. */
+.tables-scroll {
+  overflow: auto;
+  max-height: calc(100vh - 16rem);
+  min-height: 12rem;
+}
+.tables-card .drilldown-table { width: 100%; min-width: 56rem; }
+/* The header sticks to the top of the box, not under a counter: the
+ * counter of this page stands outside the card. */
+.tables-card .drilldown-table thead th { top: 0; }
+/* The card carries the title; the table's own caption is for a screen
+ * reader, which reads the caption and not the heading over the box. */
+.tables-card .drilldown-table > caption {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+/* The rows of a page, not of a dialog: a line of air above and below each,
+ * because a page has the room a dialog has not. */
+.tables-card .drilldown-table th,
+.tables-card .drilldown-table td { padding: 0.625rem 0.75rem; }
+.tables-card .drilldown-table .dd-wide { min-width: 18rem; }
+.tables-card .drilldown-table .dd-source { min-width: 14rem; max-width: 24rem; }
+/* "Load more" under the rows, a gap from the last rule. */
+.tables-card .rows-foot { padding: var(--gap) 0 0; }
+
+/* THE COUNTER STANDS BETWEEN THE CARDS, outside either: "Row 1-20 of
+ * 3,094 - 20 loaded" is about the rows and is not one of them. Muted,
+ * where the dialog's carries the accent bar - and STICKY to the top of the
+ * window, on the page's own ground, so it is in sight however far the
+ * page has been scrolled to bring the box up. Empty until the first page
+ * is in, and then the height of a line, so the card under it does not
+ * move when the number arrives. */
+.tables-counter {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  min-height: 2.25rem;
+  margin-top: var(--gap);
+  padding: 0.375rem 0;
+  background: var(--bg);
+}
+.tables-counter .drilldown-count {
+  position: static;
+  margin: 0;
+  padding: 0 0.25rem;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--muted);
+}
+.tables-counter:empty { position: static; margin-top: 0; min-height: 0; padding: 0; }
+/* The document that opens under a row: the nested tables take the row's
+ * width and never scroll on their own. */
+.tables-card .drilldown-nested-table { width: 100%; min-width: 0; }
+
+/* ── The document that opens ──────────────────────────────────────────── */
+
+/* One heading per kind, then that kind's table. The heading carries the
+ * count, so a reader scrolling past knows how much is under it before the
+ * rows say so. */
+.tables-doc { display: grid; gap: 0.75rem; }
+.tables-doc-kind { display: grid; gap: 0.25rem; }
+.tables-doc-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+/* The kinds a document has no rows of, in one muted line rather than five
+ * empty tables. */
+.tables-doc-none { margin: 0; color: var(--muted); }
+/* The heading over each kind carries the count; the counter every table
+ * draws would say it again one line under. Not drawn here. */
+.tables-doc .drilldown-count { display: none; }
+.tables-doc .drilldown-table thead th { position: static; }
+
+/* ── Buckets ──────────────────────────────────────────────────────────── */
+
+.tables-bucket-table { width: 100%; min-width: 0; }
+.tables-bucket-table thead th { position: static; }
+.tables-bucket-table .tables-bucket-members { color: var(--muted); }
+.tables-bucket-table .tables-bucket-count { font-weight: 600; margin-right: 0.375rem; }
+/* The documents behind a bucket, under its row: the same nested box the
+ * group rows use, with a counter of its own that stays where it is. */
+.tables-bucket-table .drilldown-nested-box .drilldown-count { position: static; }
+.tables-bucket-table .drilldown-nested-box .drilldown-table thead th { position: static; }
+.tables-bucket-table .drilldown-nested-box .drilldown-table { width: 100%; min-width: 0; }
+
+/* ── Print ────────────────────────────────────────────────────────────── */
+
+/* On a sheet the rows run down the page, every one that was loaded, at the
+ * paper's width. */
+@media print {
+  .tables-scroll { max-height: none !important; overflow: visible !important; }
+  .tables-card .drilldown-table { min-width: 0; }
+  .tables-counter { position: static; }
+  .tables-tabs-row, .tables-search { display: none !important; }
+}

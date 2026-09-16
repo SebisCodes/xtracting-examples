@@ -227,9 +227,10 @@
     (see iconFor there). A view whose icon changes here changes everywhere it
     is shown, and there is no second list to forget.
 
-    THE ELEVEN VIEWS ARE KEYED BY THEIR OWN ID, the one routers/pages.py uses
-    in VIEWS, so the bar asks for `icon(id)` and cannot ask for a name that is
-    not a view. Each draws what its page is ABOUT rather than a generic shape:
+    THE VIEWS ARE KEYED BY THEIR OWN ID, the one routers/pages.py uses in
+    VIEWS, so the bar asks for `icon(id)` and cannot ask for a name that is
+    not a view. Each draws what its page is ABOUT rather than a generic shape
+    (`tables` is a grid of rows and columns, because that page IS a table):
     a reader who has seen the page once should recognise the glyph without
     reading the word beside it - and the word is beside it in any case, because
     an icon-only bar is a memory test (app.css says so where the bar is
@@ -256,6 +257,7 @@
   "map":       "M12 21s7-7.6 7-12a7 7 0 10-14 0c0 4.4 7 12 7 12M12 9.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5",
   "heatmap":   "M12 12m-2.5 0a2.5 2.5 0 105 0a2.5 2.5 0 10-5 0M12 12m-6.5 0a6.5 6.5 0 1013 0a6.5 6.5 0 10-13 0",
   "graph":     "M6 7m-2 0a2 2 0 104 0a2 2 0 10-4 0M18 6m-2 0a2 2 0 104 0a2 2 0 10-4 0M12 18m-2 0a2 2 0 104 0a2 2 0 10-4 0M8 6.7l8-.5M7.2 8.9l3.6 7.3M16.8 7.6l-3.6 8.6",
+  "tables":    "M4 5h16v14H4zM4 9.7h16M4 14.3h16M9.3 5v14M14.7 5v14",
   "buckets":   "M4 7h5.5l2 2H20v10H4zM4 7V5h5l2 2",
   "colours":   "M12 3.5s6 6.6 6 10.2a6 6 0 11-12 0c0-3.6 6-10.2 6-10.2",
   "sources":   "M2.5 12s3.6-6 9.5-6 9.5 6 9.5 6-3.6 6-9.5 6-9.5-6-9.5-6M12 14.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5",
@@ -277,7 +279,7 @@
     for.
 
     WHY IT IS A BUTTON AND NOT A `title=`. This product says in four places -
-    static/js/drilldown.js twice, static/css/settings.css and static/js/map.js -
+    static/js/rows.js twice, static/css/settings.css and static/js/map.js -
     that content may never live only in a hover, because a tooltip needs a
     mouse and half the people who need the sentence are on a tablet. So: the
     pointer opens the bubble, and so do a click and the keyboard. Once clicked

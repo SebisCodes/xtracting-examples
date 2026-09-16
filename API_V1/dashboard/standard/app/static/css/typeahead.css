@@ -198,6 +198,53 @@
   padding-left: 0.5rem;
 }
 
+/* ── Rows with a tick (`data-multi="true"`) ──────────────────────────────
+ *
+ * The Buckets member picker: a tick per row, ticked to add and ticked again
+ * to remove, and the list stays open through both. The box is drawn like
+ * the type checklist on the map (map.css: .type-check), so the two lists
+ * read as one kind of control - but it is a span and not an <input>: the
+ * whole 44 px row is the target, and `aria-checked` on the option is the
+ * state. The box takes a third grid column at the left; the row's own
+ * padding keeps it off the edge, and the grid gap keeps it off the label.
+ * The check inside is two borders of a rotated box, no glyph character. */
+.typeahead-list[aria-multiselectable="true"] li[role="option"] {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+.typeahead-list[aria-multiselectable="true"] .typeahead-label { grid-column: 2; }
+.typeahead-list[aria-multiselectable="true"] .typeahead-count { grid-column: 3; }
+.typeahead-list[aria-multiselectable="true"] .typeahead-hint { grid-column: 2 / -1; }
+
+.typeahead-tick {
+  grid-column: 1;
+  grid-row: 1;
+  align-self: center;
+  position: relative;
+  box-sizing: border-box;
+  width: 1.125rem;
+  height: 1.125rem;
+  border: 1px solid var(--line, #8a8a8a);
+  border-radius: 3px;
+  background: var(--white, #fff);
+}
+
+.typeahead-list li[aria-checked="true"] .typeahead-tick {
+  background: var(--accent, #1d4f91);
+  border-color: var(--accent, #1d4f91);
+}
+
+.typeahead-list li[aria-checked="true"] .typeahead-tick::after {
+  content: "";
+  position: absolute;
+  left: 0.3125rem;
+  top: 0.0625rem;
+  width: 0.3125rem;
+  height: 0.625rem;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
 .typeahead-reset {
   color: var(--muted, #555);
   font-style: italic;

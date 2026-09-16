@@ -58,6 +58,78 @@ const ATTRIBUTION = '© <a href="https://www.openstreetmap.org/copyright">OpenSt
 import { pinIcon } from "./mappin.js";
 import { heatStops, HEAT_MIN_ALPHA } from "./palette.js";
 import { arcPath } from "./mapline.js";
+import { api } from "./api.js";
+import { contextHref } from "./state.js";
+import { openDrilldown } from "./drilldown.js";
+
+/* ── The rows behind a popup ─────────────────────────────────────────── */
+/*
+ * EVERY POPUP OPENS INTO ITS ROWS, on this map as on the Map view
+ * (static/js/map.js says why there). A point is the archive's location
+ * rows at one coordinate; a line is its connection rows for one pair. The
+ * drilldown (static/js/drilldown.js) lists them, a page at a time, with the
+ * same three links on every row. A BUTTON in the popup, not a link, and the
+ * popup is closed first so the focus goes to the dialog and comes back to
+ * the map.
+ */
+const rowLinks = {
+  source: (domain) => contextHref("/diagrams/source", { q: domain, axis: "object" }),
+  entity: (name) => contextHref("/diagrams/entity", { q: name, axis: "object" }),
+  rows: (src) => contextHref("/tables", { tab: "sources", source: `${src.task}|${src.id}` }),
+};
+
+function openRowsButton(text, label, onOpen) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "popup-open";
+  if (text) button.textContent = text;
+  button.title = "Show rows";
+  button.setAttribute("aria-label", label);
+  button.addEventListener("click", onOpen);
+  return button;
+}
+
+/* Where the focus goes when the dialog closes: the map, because the button
+ * that opened it went with its popup. */
+function focusMap(map) {
+  const box = map ? map.getContainer() : null;
+  if (box && box.isConnected && typeof box.focus === "function") box.focus({ preventScroll: true });
+}
+
+/* The location rows at one point, by its coordinates: the places on these
+ * maps carry no entity id, only where they are. */
+function openPointRows(map, place, title, subtitle) {
+  if (map) map.closePopup();
+  openDrilldown({
+    title,
+    subtitle,
+    onClose: () => focusMap(map),
+    rowsLabel: "Locations",
+    emptyText: "No rows at this point any more - the archive may have changed.",
+    links: rowLinks,
+    load: (page) => api("/api/tables/place", {
+      channel: "drilldown",
+      params: { lat: place.lat, lng: place.lng, ddpage: page },
+    }),
+  });
+}
+
+/* The connection rows of one pair in one direction: `from` plays the role
+ * towards `to`, which is the sentence the popup showed. */
+function openPairRows(map, from, to) {
+  if (map) map.closePopup();
+  openDrilldown({
+    title: `${from.name || "?"} is a ${from.role || "party"} of ${to.name || "?"}`,
+    onClose: () => focusMap(map),
+    rowsLabel: "Connections",
+    emptyText: "No rows for this pair any more - the archive may have changed.",
+    links: rowLinks,
+    load: (page) => api("/api/tables/pair", {
+      channel: "drilldown",
+      params: { a: from.id, b: to.id, role: from.role || "", ddpage: page },
+    }),
+  });
+}
 
 /* The same numbers the Heatmap view uses (static/js/heatmap.js): a radius
  * wide enough that two nearby squares melt into one patch, and a blur of
@@ -146,7 +218,7 @@ function tipForPoint(place) {
     .filter(Boolean).join(" - "));
 }
 
-function popupForPoint(place) {
+function popupForPoint(place, map) {
   const box = document.createElement("div");
   const names = (place.names || []).filter(Boolean);
   const title = document.createElement("span");
@@ -180,13 +252,16 @@ function popupForPoint(place) {
       + (hidden > 0 ? `${names.length > 1 ? " - " : ""}and ${hidden} more` : "");
     box.appendChild(rest);
   }
+  // THE COUNT OPENS THE ROWS it counts (openPointRows); a point that came
+  // without a count still opens, under the words alone.
   const count = Number(place.count) || 0;
-  if (count) {
-    const n = document.createElement("div");
-    n.className = "popup-type";
-    n.textContent = count === 1 ? "1 row" : `${count} rows`;
-    box.appendChild(n);
-  }
+  const open = openRowsButton(count ? (count === 1 ? "1 row" : `${count} rows`) : "Show rows",
+                              `Show rows at ${title.textContent}`,
+                              () => openPointRows(map, place, title.textContent,
+                                                  [place.address !== title.textContent ? place.address : "",
+                                                   kinds.join(" - ")].filter(Boolean).join(" - ")));
+  open.classList.add("popup-count");
+  box.appendChild(open);
   return box;
 }
 
@@ -203,20 +278,22 @@ function popupForPoint(place) {
  * with an ellipsis and the whole sentence is on the element's title, which
  * is the same bargain every truncated label on this page makes.
  */
-function sentence(from, to) {
-  const line = document.createElement("div");
-  line.className = "popup-line";
+function sentence(from, to, map) {
   const text = `${from.name || "?"} is a ${from.role || "party"} of ${to.name || "?"}`;
-  line.textContent = text;
-  line.title = text;
+  // THE SENTENCE OPENS ITS ROWS (openPairRows): the connections read this
+  // way round. The whole sentence is its accessible name, so a name cut by
+  // the ellipsis is still said in full; the pointer's tooltip names the
+  // function, like every other control's.
+  const line = openRowsButton(text, `Show rows: ${text}`, () => openPairRows(map, from, to));
+  line.classList.add("popup-line");
   return line;
 }
 
-function popupForLine(line) {
+function popupForLine(line, map) {
   const box = document.createElement("div");
   box.className = "popup-lines";
-  box.appendChild(sentence(line.from, line.to));
-  box.appendChild(sentence(line.to, line.from));
+  box.appendChild(sentence(line.from, line.to, map));
+  box.appendChild(sentence(line.to, line.from, map));
   /* THE COLOUR'S NAME, and only when it is not one of the two words the
    * sentences have just used. The groups are named after the ties in them, so
    * on a Customer/Supplier line the group is often called "Customer" - and a
@@ -441,6 +518,13 @@ export function createMiniMap(container, opts = {}) {
       type.textContent = [place.entity_type, place.type].filter(Boolean).join(" - ");
       box.appendChild(type);
     }
+    // The way into the rows at this point (openPointRows), under the facts.
+    const open = openRowsButton("Show rows", `Show rows at ${title.textContent}`,
+                                () => openPointRows(map, place, title.textContent,
+                                                    [place.address !== title.textContent ? place.address : "",
+                                                     place.entity_type, place.type].filter(Boolean).join(" - ")));
+    open.classList.add("popup-count");
+    box.appendChild(open);
     return box;
   }
 
@@ -519,7 +603,7 @@ export function createMiniMap(container, opts = {}) {
             direction: "top", offset: [0, -38], sticky: true, opacity: 1,
             className: "map-tip",
           });
-          marker.bindPopup(popupForPoint(place));
+          marker.bindPopup(popupForPoint(place, map));
           marker.addTo(markerLayer);
         });
         return;
@@ -541,7 +625,7 @@ export function createMiniMap(container, opts = {}) {
         // As a node, never as the string: Leaflet writes a string tooltip
         // with innerHTML, and the title is a name out of the archive.
         if (title) dot.bindTooltip(tipBody(title), { direction: "top" });
-        dot.bindPopup(popupForPoint(place));
+        dot.bindPopup(popupForPoint(place, map));
         dot.addTo(markerLayer);
       });
     },
@@ -579,7 +663,7 @@ export function createMiniMap(container, opts = {}) {
         });
         // Wider than Leaflet's 300 px default: a sentence with two entity
         // names in it is longer than that, and it is one line by contract.
-        path.bindPopup(popupForLine(line), { maxWidth: 560 });
+        path.bindPopup(popupForLine(line, map), { maxWidth: 560 });
         path.addTo(lineLayer);
         drawnLines.push({ path, from: line.from, to: line.to });
       });

@@ -61,17 +61,49 @@
       <p class="page-purpose">A bucket names the values that mean the same thing to you. Searching for the bucket in any view searches every member of it, and the result is shown as one thing.</p>
       <p>The kind says what a bucket is about: entities, entity types, document types, places, location types, event types, attribute types, units or market topics.</p>
       <p>The name is a short label - it is what you type into a search field later.</p>
-      <p>Choosing a suggestion adds it at once, with its type where the kind has one.</p>
+      <p>Ticking a suggestion adds it at once, with its type where the kind has one, and the list stays open for the next one; ticking it again removes it.</p>
       <p>A value that is already in another bucket of the same kind is shown with the name of that bucket and cannot be added twice: one value belongs to one bucket, or a search would have two answers.</p>
       <p>Connection types are not here. They are grouped on the Connection colours page - one colour per group - and a search treats a colour group exactly as it treats a bucket.</p>
     </div>
   </details>
 </div>
 
-{#- WHAT IS SEARCHED, THEN HOW IT IS NARROWED, THEN THE ACTION - the same
-    order as every other toolbar in the product, every control the same
-    height, every label above its own control, and the button group carrying
-    an empty label row so it cannot float up out of line. -#}
+<section aria-labelledby="bucket-list-title">
+  <div class="page-header">
+    <h2 id="bucket-list-title" class="card-title">Your buckets</h2>
+    <span class="card-meta" id="bucket-count"></span>
+  </div>
+
+  {#- THE SEARCH IS THE FIRST THING IN THE TOOLBAR, the same width and shape
+      as on every other view, with the same placeholder grammar and the same
+      clear control. What is searched, then how it is narrowed. -#}
+  <form class="filter-card toolbar settings-toolbar bucket-filter" id="bucket-filter" novalidate>
+    <div class="field">
+      <label class="field-label" for="bucket-search">Find a bucket</label>
+      <input type="search" id="bucket-search" placeholder="Every bucket"
+             autocomplete="off" spellcheck="false">
+    </div>
+    <div class="field bucket-kind-field">
+      <label class="field-label" for="bucket-kind-filter">Kind</label>
+      <select id="bucket-kind-filter"></select>
+    </div>
+  {#- The same row as every other query on the product: the button under the
+      fields, on the left, with "Clear" beside it as the way back. The list
+      still narrows as you type - this is for somebody who does not know
+      that, which is everybody the first time. -#}
+  {{ search_actions(clear_id="bucket-filter-clear", clear="custom") }}
+  </form>
+  {#- A SET FILTER IS STATE AND MAY NOT BE HIDDEN: this line says what is
+      being filtered out whenever the list is showing less than everything. -#}
+  <p class="query-status filter-note" id="bucket-filter-note" aria-live="polite" hidden></p>
+
+{#- UNDER THE SEARCH, ABOVE THE LIST: finding a bucket is what most visits
+    are for, making one is the rarer act, and a new bucket appears in the
+    list directly under the form that made it. What is searched, then how it
+    is narrowed, then the action - the same order as every other toolbar in
+    the product, every control the same height, every label above its own
+    control, and the button group carrying an empty label row so it cannot
+    float up out of line. -#}
 <form class="filter-card bucket-new" id="bucket-new" novalidate>
   <div class="toolbar settings-toolbar">
     <div class="field bucket-kind-field">
@@ -104,35 +136,6 @@
 </form>
 
 <div class="undo-strip" id="bucket-undo" role="status" hidden></div>
-
-<section aria-labelledby="bucket-list-title">
-  <div class="page-header">
-    <h2 id="bucket-list-title" class="card-title">Your buckets</h2>
-    <span class="card-meta" id="bucket-count"></span>
-  </div>
-
-  {#- THE SEARCH IS THE FIRST THING IN THE TOOLBAR, the same width and shape
-      as on every other view, with the same placeholder grammar and the same
-      clear control. What is searched, then how it is narrowed. -#}
-  <form class="filter-card toolbar settings-toolbar bucket-filter" id="bucket-filter" novalidate>
-    <div class="field">
-      <label class="field-label" for="bucket-search">Find a bucket</label>
-      <input type="search" id="bucket-search" placeholder="Every bucket"
-             autocomplete="off" spellcheck="false">
-    </div>
-    <div class="field bucket-kind-field">
-      <label class="field-label" for="bucket-kind-filter">Kind</label>
-      <select id="bucket-kind-filter"></select>
-    </div>
-  {#- The same row as every other query on the product: the button under the
-      fields, on the left, with "Clear" beside it as the way back. The list
-      still narrows as you type - this is for somebody who does not know
-      that, which is everybody the first time. -#}
-  {{ search_actions(clear_id="bucket-filter-clear", clear="custom") }}
-  </form>
-  {#- A SET FILTER IS STATE AND MAY NOT BE HIDDEN: this line says what is
-      being filtered out whenever the list is showing less than everything. -#}
-  <p class="query-status filter-note" id="bucket-filter-note" aria-live="polite" hidden></p>
 
   <ul class="bucket-list list" id="bucket-list" aria-busy="false">
     <li class="loading">Loading buckets…</li>

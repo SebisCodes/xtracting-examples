@@ -48,8 +48,8 @@ APP_DIR = Path(__file__).resolve().parent
 # Every router. Order matters only for documentation.
 ROUTERS = (
     "pages", "api_meta", "api_suggest", "api_dashboard", "api_query", "api_events",
-    "api_diagrams", "api_map", "api_graph", "api_settings", "api_export", "api_sources",
-    "api_logs", "api_projects", "api_status",
+    "api_diagrams", "api_map", "api_graph", "api_settings", "api_tables", "api_export",
+    "api_sources", "api_logs", "api_projects", "api_status",
 )
 
 

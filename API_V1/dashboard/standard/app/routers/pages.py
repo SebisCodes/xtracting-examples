@@ -43,6 +43,9 @@ templates.env.globals["app_version"] = __version__
 VIEWS: tuple[tuple[str, str, str], ...] = (
     ("dashboard", "Dashboard", "/"),
     ("query", "Query", "/query"),
+    # Beside Query, because the two answer the same page-wide question -
+    # "what is in the archive" - one as a search and one as the tables.
+    ("tables", "Tables", "/tables"),
     ("events", "Events", "/events"),
     ("diagrams", "Diagrams", "/diagrams"),
     ("map", "Map", "/map"),
@@ -57,8 +60,9 @@ VIEWS: tuple[tuple[str, str, str], ...] = (
     # "Sources" expects those five documents, not a crawler configuration
     # page.
     #
-    # ONE WORD, because eleven buttons already fill 974 of the 1024 px this
-    # dashboard is laid out for: "Watched pages" wraps the bar onto a
+    # ONE WORD, because the twelve buttons of this bar fit on one row of the
+    # 1024 px this dashboard is laid out for only through the nav's own
+    # padding (static/css/app.css): "Watched pages" wraps the bar onto a
     # second row and takes 48 px off every view's first screen - which is
     # the height of two rows of the log and the top of the map. The page it
     # opens is the Watchlist; the rows on it are watched pages.
@@ -85,7 +89,7 @@ VIEWS: tuple[tuple[str, str, str], ...] = (
 # importance of its own source would cut paths in the middle (api_map.py:
 # _SCOPE_IDS_FILTERED). A page that claimed the whole drawing was narrowed
 # would be making a promise the lines on it do not keep.
-FILTERED_VIEWS = frozenset({"query", "events", "diagrams", "graph", "map", "heatmap"})
+FILTERED_VIEWS = frozenset({"query", "tables", "events", "diagrams", "graph", "map", "heatmap"})
 
 # The pages under /diagrams/{scope}. "summary" is /diagrams itself.
 DIAGRAM_SCOPES = {
@@ -156,6 +160,11 @@ def query(request: Request):
     return render(request, "query.html", "query", "Query")
 
 
+@router.get("/tables", response_class=HTMLResponse)
+def tables(request: Request):
+    return render(request, "tables.html", "tables", "Tables")
+
+
 @router.get("/events", response_class=HTMLResponse)
 def events(request: Request):
     return render(request, "events.html", "events", "Events")
@@ -206,10 +215,10 @@ def colours(request: Request):
 def projects_page(request: Request):
     """The Xtracting projects the crawler holds a key for.
 
-    Deliberately NOT in the top bar. Eleven buttons already fill 974 of the
-    1024 px this dashboard is laid out for, and the comment on VIEWS says what a
-    twelfth costs: the bar wraps onto a second row and every view loses 48 px of
-    its first screen. This page is reached from the Watchlist, which is the only
+    Deliberately NOT in the top bar. Twelve buttons fill the 1024 px this
+    dashboard is laid out for, and the comment on VIEWS says what one more
+    costs: the bar wraps onto a second row and every view loses 48 px of its
+    first screen. This page is reached from the Watchlist, which is the only
     place a project is a question anybody is asking.
 
     It marks the view "sources" so the Watchlist stays lit in the bar - a person

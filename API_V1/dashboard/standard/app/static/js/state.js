@@ -26,8 +26,15 @@
  * every view is showing, and every request and every Export link has to carry
  * them or the file a person downloads holds rows the screen never showed.
  * "" for the perspective is All, which is no filter. */
+/* `type`, `sort`, `buckets` and `source` are the Tables view's four
+ * (static/js/tables.js): a type beside the name, the order of the rows, whether
+ * the bucket block is drawn, and the one document the page is narrowed to
+ * ("<task>|<id>", the address the Rows link of every row carries). They
+ * are in the URL for the reason every other key is - a reload, a shared
+ * link and the Export menu all have to show the same rows - and they are
+ * empty on every other view, which writes none of them. */
 export const KEYS = ["q", "project", "language", "perspective", "min_importance",
-                     "timeframe", "page", "tab"];
+                     "timeframe", "page", "tab", "type", "sort", "buckets", "source"];
 
 export const state = {
   q: "",
@@ -38,6 +45,10 @@ export const state = {
   timeframe: "",
   page: 0,
   tab: "",
+  type: "",
+  sort: "",
+  buckets: "",
+  source: "",
 };
 
 function clean(key, value) {
@@ -138,6 +149,23 @@ export function params(extra) {
 
 /* Fill a form field from the state once - the "search input is filled from
  * q once" rule, made explicit. */
+/* A link to another view that keeps the project and the language: every
+ * view shows one pair, and a link that drops it lands on whatever pair the
+ * cookie holds. `params` is what the link is about (q, tab, source...); the
+ * pair is added under it and never over it, so a caller who names a project
+ * on purpose keeps it. The Map, the Graph and Diagrams build the same link
+ * for their own popups and panels. */
+export function contextHref(path, params) {
+  const url = new URL(path, window.location.origin);
+  if (state.project) url.searchParams.set("project", state.project);
+  if (state.language) url.searchParams.set("language", state.language);
+  Object.entries(params || {}).forEach(([k, v]) => {
+    if (v === "" || v === null || v === undefined) return;
+    url.searchParams.set(k, String(v));
+  });
+  return url.pathname + url.search;
+}
+
 export function fillOnce(input, key) {
   if (!input) return;
   const v = state[key];

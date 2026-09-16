@@ -68,6 +68,7 @@ CASES: list[tuple[str, dict, str]] = [
     ("activities", {}, "table"),
     ("latest-events", {}, "id"),
     ("query", {"terms": "battery", "address": "Cupertino, California, USA"}, "kind"),
+    ("tables", {"tab": "sources"}, "row"),
     ("events", {"by": "entity", "q": "Apple"}, "id"),
     ("diagrams", {"scope": "entity", "tab": "connections", "q": "Apple", "timeframe": "1y"}, "tab"),
     # "row", not "date": the drilldown's file carries the dialog's own

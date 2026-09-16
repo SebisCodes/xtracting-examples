@@ -212,10 +212,13 @@ def normalise_terms(members: list[tuple[str, str | None]]) -> list[tuple[str, st
     return out
 
 
-def bucket_terms(members: list[tuple[str, str | None]], prefix: str = "bt") -> tuple[sql.Composable, dict[str, Any]]:
+def bucket_terms(members: list[tuple[str, str | None]], prefix: str = "bt",
+                 ordinal: bool = False) -> tuple[sql.Composable, dict[str, Any]]:
     """A `(VALUES ...) AS bt(name, type)` list of lower-cased members, and its
     params. Types are cast so a NULL in the first row does not leave the
-    column untyped.
+    column untyped. `ordinal` adds a third column, `ord`, the member's
+    position in the normalised list - for a statement that answers per
+    member and has to say which one.
 
     >>> frag, params = bucket_terms([("Apple Inc.", "Company"), ("Apple", None)])
     >>> sorted(params.items())
@@ -229,10 +232,13 @@ def bucket_terms(members: list[tuple[str, str | None]], prefix: str = "bt") -> t
     for i, (name, typ) in enumerate(terms):
         params[f"{prefix}_name_{i}"] = name
         params[f"{prefix}_type_{i}"] = typ
-        rows.append(sql.SQL("(%({n})s::text, %({t})s::text)").format(
-            n=sql.SQL(f"{prefix}_name_{i}"), t=sql.SQL(f"{prefix}_type_{i}")))
-    frag = sql.SQL("(VALUES {rows}) AS {p}(name, type)").format(
-        rows=sql.SQL(", ").join(rows), p=sql.Identifier(prefix))
+        row = sql.SQL("(%({n})s::text, %({t})s::text{o})").format(
+            n=sql.SQL(f"{prefix}_name_{i}"), t=sql.SQL(f"{prefix}_type_{i}"),
+            o=sql.SQL(f", {i}::int") if ordinal else sql.SQL(""))
+        rows.append(row)
+    frag = sql.SQL("(VALUES {rows}) AS {p}({cols})").format(
+        rows=sql.SQL(", ").join(rows), p=sql.Identifier(prefix),
+        cols=sql.SQL("name, type, ord" if ordinal else "name, type"))
     return frag, params
 
 
@@ -241,6 +247,34 @@ def member_match(alias: str = "e", terms: str = "bt") -> sql.Composable:
     name, and the same type unless the member has none."""
     return sql.SQL("lower({a}.text_name) = {t}.name AND ({t}.type IS NULL OR lower({a}.text_type) = {t}.type)").format(
         a=sql.Identifier(alias), t=sql.Identifier(terms))
+
+
+# THE ONE KIND WHOSE VALUES ARE MATCHED AS A SUBSTRING. "Rotterdam" has to
+# reach "Rotterdam, Netherlands" wherever a place bucket is applied, exactly
+# as it does when it is typed into the Query page's place box. Every other
+# kind is a vocabulary word, and a word is matched whole.
+SUBSTRING_KINDS = frozenset({"location"})
+
+
+def value_match(kind: str, alias: str = "t", column: str = "text_type",
+                param: str = "vals") -> sql.Composable:
+    """`lower(alias.column)` is one of the values in `%(param)s` - a list
+    of lower-cased strings - or, for a place, contains one of them.
+
+    THE ONE PREDICATE FOR "A ROW SAYS ONE OF THESE VALUES", read by the
+    Buckets page when it counts what a bucket matches and by the Tables
+    view when it lists the documents that hold one; a second spelling of
+    it would be a bucket that counts one set of rows and lists another.
+
+    `IN (SELECT unnest(...))` and not `= ANY(array)`: the subselect is
+    hashed once and each row is one probe (routers/api_map.py measures the
+    difference on a compressed hypertable).
+    """
+    target = sql.SQL("lower({a}.{c})").format(a=sql.Identifier(alias), c=sql.Identifier(column))
+    if kind in SUBSTRING_KINDS:
+        return sql.SQL("EXISTS (SELECT 1 FROM unnest(%({p})s::text[]) AS v "
+                       "WHERE position(v IN {t}) > 0)").format(p=sql.SQL(param), t=target)
+    return sql.SQL("{t} IN (SELECT unnest(%({p})s::text[]))").format(t=target, p=sql.SQL(param))
 
 
 # ── Grouping: buckets of every kind, and the colour groups ───

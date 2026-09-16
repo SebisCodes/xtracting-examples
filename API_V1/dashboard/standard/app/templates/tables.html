@@ -1,0 +1,176 @@
+{#- Tables: the archive as rows, one kind at a time.
+
+    Eight tabs, the same eight the Diagrams view draws pictures of, and on
+    each of them the rows themselves - the table the drilldown dialog shows
+    behind a clicked bar, mounted on a page (static/js/rows.js). A reader who
+    has learned the dialog has learned this page, and a reader who wants
+    everything the archive read out of one document opens it here: every
+    document row opens into its entities, its ratings, its events, each a
+    table of its own (static/js/tables.js).
+
+    THE TAB STRIP IS WRITTEN OUT, not fetched, so the page has its navigation
+    before any JavaScript runs - the same decision diagrams.html takes, and
+    for the same reason. The list below is app/charts/__init__.py TABS, word
+    for word and in its order; tests/unit/test_tables_view.py pins the two
+    together, so the strips of the two views cannot drift apart.
+
+    Variables from routers/pages.py: the usual view/title/ctx/projects.
+-#}
+{% extends "_layout.html" %}
+{% from "_macros.html" import search_actions, help_icon, help_text, icon %}
+
+{%- set tabs = [("sources", "Sources"), ("ratings", "Ratings"), ("entities", "Entities"),
+                ("connections", "Connections"), ("locations", "Locations"),
+                ("market", "Market Insights"), ("attributes", "Attributes"),
+                ("events", "Events")] -%}
+{%- set current_tab = request.query_params.get('tab') if request.query_params.get('tab') in tabs|map(attribute=0)|list else 'sources' -%}
+{%- set current_q = request.query_params.get('q') or '' -%}
+{%- set current_type = request.query_params.get('type') or '' -%}
+{%- set sorts = [("newest", "Newest"), ("oldest", "Oldest"), ("most", "Most rows"), ("fewest", "Fewest rows")] -%}
+{%- set current_sort = request.query_params.get('sort') if request.query_params.get('sort') in sorts|map(attribute=0)|list else 'newest' -%}
+{%- set current_buckets = request.query_params.get('buckets') == '1' -%}
+
+{% block head %}
+<link rel="stylesheet" href="{{ static('css/views.css') }}">
+{#- The row table's own sheet (css/drilldown.css): the same table the
+    drilldown dialog draws, and this page draws it on the page. -#}
+<link rel="stylesheet" href="{{ static('css/drilldown.css') }}">
+<link rel="stylesheet" href="{{ static('css/tables.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Tables</h1>
+  <details class="page-about">
+    <summary>About this page</summary>
+    <div class="page-about-body">
+      <p class="page-purpose">
+        The rows of <strong>{{ ctx.project or 'this project' }}</strong> ({{ ctx.language or '-' }}), one kind at a time, newest first.
+      </p>
+      <p>Pick a tab; only the open one is loaded, a page at a time as you scroll. Name and Type narrow the rows to one thing or one class of thing; Search runs when you press Search, and the tab and the sort change the rows at once.</p>
+      <p><strong>Most rows</strong> and <strong>Fewest rows</strong> group the rows by name and count them; each group opens into its rows. Every document row opens into everything the archive read out of that document.</p>
+      <p><strong>Buckets</strong> lists the buckets whose members appear in the answer, each opening into the documents that mention its members.</p>
+    </div>
+  </details>
+</div>
+
+{#- The strip says out loud what it changes, the way the Diagrams strips do,
+    and the visible words are the accessible name (aria-labelledby). -#}
+<div class="tabs-row tables-tabs-row">
+  <span class="strip-hint" role="img" tabindex="0"
+        title="Which kind of row is listed. The name, the type and the sort stay as they are; only the rows change."
+        aria-label="Which kind of row is listed. The name, the type and the sort stay as they are; only the rows change.">i</span>
+  <span class="strip-label" id="tables-strip-label">Tables:</span>
+  <div class="tabs" role="tablist" aria-labelledby="tables-strip-label">
+    {%- for id, label in tabs %}
+    <button type="button" role="tab" id="tab-{{ id }}" data-tab="{{ id }}"
+            aria-controls="tables-panel" aria-selected="{{ 'true' if id == current_tab else 'false' }}"
+            tabindex="{{ '0' if id == current_tab else '-1' }}">{{ label }}</button>
+    {%- endfor %}
+  </div>
+</div>
+
+{#- A TOOLBAR, so it obeys the one alignment rule (app.css; measured at
+    1024x768 and 1440x900): every control 44 px with its top on one line,
+    every label above its own control on the line above. The order is the
+    one every other view keeps: what is searched, then how, then the
+    action. -#}
+<form class="filter-card tables-search" id="tables-search" novalidate>
+  <div class="toolbar tables-search-row">
+    <div class="field">
+      {#- "Document" on the Sources tab, "Name" everywhere else: a document
+          has a title and a host, not a name, and the field asks for the
+          word the tab's rows carry. static/js/tables.js swaps the word. -#}
+      <label class="field-label" for="tables-q"><span data-name-label>{{ 'Document' if current_tab == 'sources' else 'Name' }}</span>{{ help_icon("tables-q") }}</label>
+      <input type="text" id="tables-q" name="q" value="{{ current_q }}" autocomplete="off"
+             spellcheck="false" placeholder="Any name" aria-describedby="tables-q-hint">
+      {%- call help_text("tables-q") %}Part of a name, as the archive spells it. On the Sources tab it is part of a document's title or host. Leave it empty for every row.{% endcall %}
+    </div>
+    <div class="field">
+      <label class="field-label" for="tables-type">Type{{ help_icon("tables-type") }}</label>
+      <input type="text" id="tables-type" name="type" value="{{ current_type }}" autocomplete="off"
+             spellcheck="false" placeholder="Any type" aria-describedby="tables-type-hint">
+      {%- call help_text("tables-type") %}A class of thing - "Company", "Headquarters", "Press release" - as the archive spells it. Leave it empty for every type.{% endcall %}
+    </div>
+    <div class="field field--fixed">
+      <label class="field-label" for="tables-sort">Sort{{ help_icon("tables-sort") }}</label>
+      <select id="tables-sort" name="sort" aria-describedby="tables-sort-hint">
+        {%- for value, text in sorts %}
+        <option value="{{ value }}"{{ ' selected' if value == current_sort }}>{{ text }}</option>
+        {%- endfor %}
+      </select>
+      {%- call help_text("tables-sort") %}Newest and Oldest list the rows by the date they were added. Most rows and Fewest rows group them by name and count each group; a group opens into its rows.{% endcall %}
+    </div>
+    <div class="field field--fixed">
+      <span class="field-label" id="tables-buckets-label">Buckets{{ help_icon("tables-buckets") }}</span>
+      {#- In a box of its own, not a direct child of the field: app.css reads
+          a label that is a field's own child as the field's LABEL ROW (24 px,
+          block), and this one is the control - 44 px, on the control line,
+          like the select beside it. -#}
+      <div class="check-row">
+        <label class="check"><input type="checkbox" id="tables-buckets" name="buckets" value="1"
+               aria-describedby="tables-buckets-hint"{{ ' checked' if current_buckets }}> Show buckets</label>
+      </div>
+      {%- call help_text("tables-buckets") %}Lists, above the rows, the buckets whose members appear in the answer. Each opens into the documents that mention its members.{% endcall %}
+    </div>
+  </div>
+  {{ search_actions() }}
+</form>
+
+{#- What the page is doing, in words, where the reader is already looking.
+    The rows on screen stay while the next page is fetched, so without this
+    line the strip and the table disagree with nothing to say why. -#}
+<p class="grid-status" id="tables-status" role="status" aria-live="polite" hidden></p>
+
+{#- THE ONE DOCUMENT THE PAGE IS NARROWED TO. The Rows link of every row in
+    the product lands here with ?source=, and this line is the way back to
+    every document: a page showing one row with nothing saying why reads as
+    an archive of one row. -#}
+<p class="notice notice--info notice--tight" id="tables-one" hidden>Showing one document. <a href="/tables" id="tables-all">Show all documents</a></p>
+
+{#- TWO CARDS, LIKE THE COLOURS PAGE: the buckets in one, the rows in the
+    other, each with a title and a count. The counter - "Row 1-20 of 3,094
+    - 20 loaded" - stands between them, outside either card: it is about
+    the rows, not one of them. The rows' card holds a scroll box a little
+    shorter than the window (static/js/tables.js: fitBox), so a reader
+    paging through four hundred rows scrolls inside the box while the
+    counter above it stays in sight (css/tables.css: .tables-counter is
+    sticky). -#}
+<section class="card tables-card" id="tables-buckets-box" aria-labelledby="tables-buckets-title" hidden>
+  <div class="card-header">
+    <h2 class="card-title" id="tables-buckets-title">Buckets</h2>
+    <span class="card-meta" id="tables-buckets-meta"></span>
+  </div>
+  <div class="table-scroll">
+    <table class="table drilldown-table tables-bucket-table">
+      <caption class="visually-hidden">Buckets whose members appear in these rows</caption>
+      <thead>
+        <tr>
+          <th scope="col" class="dd-num">#</th>
+          <th scope="col">Bucket</th>
+          <th scope="col">Kind</th>
+          <th scope="col">Members</th>
+        </tr>
+      </thead>
+      <tbody id="tables-buckets-body"></tbody>
+    </table>
+  </div>
+</section>
+
+<div class="tables-counter" id="tables-counter"></div>
+
+<section class="card tables-card" id="tables-panel" role="tabpanel" tabindex="-1"
+         aria-labelledby="tab-{{ current_tab }}">
+  <div class="card-header">
+    <h2 class="card-title" id="tables-panel-title">{{ dict(tabs).get(current_tab, 'Rows') }}</h2>
+    <span class="card-meta" id="tables-panel-meta"></span>
+  </div>
+  <div class="tables-scroll" id="tables-scroll">
+    <div id="tables-rows"></div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="{{ static('js/tables.js') }}"></script>
+{% endblock %}

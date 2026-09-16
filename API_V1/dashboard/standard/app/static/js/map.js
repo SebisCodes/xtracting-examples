@@ -71,10 +71,11 @@
  *  on Enter, and everything a popup says is in the list as well.
  * ========================================================================== */
 
-import { apiStream, isAbort, fmtInt, watchSearch } from "./api.js";
+import { api, apiStream, isAbort, fmtInt, watchSearch } from "./api.js";
 import { pinIcon } from "./mappin.js";
 import { arcPath as arcOf, fanFactor } from "./mapline.js";
-import { state, set as setState, setExtra, getExtra } from "./state.js";
+import { state, set as setState, setExtra, getExtra, contextHref as viewHref } from "./state.js";
+import { openDrilldown } from "./drilldown.js";
 import { announce } from "./a11y.js";
 import { allUngrouped, renderLegend, ungroupedNote } from "./legend.js";
 import { tileUrl } from "./minimap.js";
@@ -637,6 +638,22 @@ function placeKind(place) {
   return place.main ? "main location" : "location";
 }
 
+/* Facts as a list of name and value, one per line (views.css .popup-facts).
+ * A fact with no value is left out: an empty line says nothing and a "-"
+ * asks the reader to wonder what it stands for. */
+function factList(pairs) {
+  const dl = document.createElement("dl");
+  dl.className = "popup-facts";
+  pairs.forEach(([name, value]) => {
+    if (value === undefined || value === null || value === "") return;
+    const row = el("div", "popup-fact");
+    row.appendChild(el("dt", null, name));
+    row.appendChild(el("dd", null, String(value)));
+    dl.appendChild(row);
+  });
+  return dl;
+}
+
 /* How many archive ids were folded into this one entity, said only when it
  * is more than one - the ordinary case has nothing to say. */
 function mergedNote(place) {
@@ -644,13 +661,106 @@ function mergedNote(place) {
   return n > 1 ? `${fmtInt(n)} archive entries` : "";
 }
 
+/* ── The rows behind a popup ─────────────────────────────────────────── */
+/*
+ * EVERY POPUP OPENS INTO ITS ROWS. A pin is the archive's location rows for
+ * one entity at one address; a line is its connection rows for one pair.
+ * The popup says what is there; the drilldown (static/js/drilldown.js, the
+ * same dialog a chart opens) lists it, a page at a time, with the same
+ * three links on every row. A BUTTON in the popup, not a link: nothing is
+ * left, the rows come to the reader.
+ *
+ * The popup is closed first, so the focus goes from the button to the
+ * dialog and comes back to the map when the dialog closes, rather than to
+ * a popup that is behind the backdrop.
+ */
+const rowLinks = {
+  source: (domain) => contextHref("/diagrams/source", domain),
+  entity: (name) => contextHref("/diagrams/entity", name),
+  rows: (src) => viewHref("/tables", { tab: "sources", source: `${src.task}|${src.id}` }),
+};
+
+/* A line of a popup that opens the rows: the words it carried, as a text
+ * button, named for the pointer and for a screen reader. */
+function openRowsButton(text, label, onOpen) {
+  const button = el("button", "popup-open", text);
+  button.type = "button";
+  button.title = "Show rows";
+  button.setAttribute("aria-label", label);
+  button.addEventListener("click", onOpen);
+  return button;
+}
+
+/* Where the focus goes when the dialog closes: the map, because the button
+ * that opened it went with its popup and the dialog cannot give the focus
+ * back to something that is no longer there. */
+function focusMap() {
+  const box = map ? map.getContainer() : null;
+  if (box && box.isConnected && typeof box.focus === "function") box.focus({ preventScroll: true });
+}
+
+function openPlaceRows(place) {
+  if (map) map.closePopup();
+  const facts = [place.entity_type, place.type, placeKind(place)].filter(Boolean).join(" - ");
+  openDrilldown({
+    title: place.entity,
+    subtitle: [place.address, facts].filter(Boolean).join(" - "),
+    onClose: focusMap,
+    rowsLabel: "Locations",
+    emptyText: "No rows for this place any more - the archive may have changed.",
+    links: rowLinks,
+    load: (page) => api("/api/tables/place", {
+      channel: "drilldown",
+      params: { entity: place.entity_id, address: place.address, ddpage: page },
+    }),
+  });
+}
+
+/* The connections of one pair - one kind of them, read from the end that
+ * plays the part (endsOf), or every kind when `kind` is null. */
+function openPairRows(line, kind) {
+  if (map) map.closePopup();
+  const a = kind && kind.entity !== line.from.id ? line.to : line.from;
+  const b = a === line.from ? line.to : line.from;
+  const article = /^[aeiou]/i.test((kind && kind.name) || "") ? "an" : "a";
+  openDrilldown({
+    title: kind ? `${a.name} is ${article} ${kind.name} of ${b.name}` : `${a.name} and ${b.name}`,
+    subtitle: kind
+      ? `${fmtInt(kind.count)} ${kind.count === 1 ? "connection" : "connections"}`
+      : `${fmtInt(line.count)} ${line.count === 1 ? "connection" : "connections"} in the archive`,
+    onClose: focusMap,
+    rowsLabel: "Connections",
+    emptyText: "No rows for this pair any more - the archive may have changed.",
+    links: rowLinks,
+    load: (page) => api("/api/tables/pair", {
+      channel: "drilldown",
+      params: { a: a.id, b: b.id, role: kind ? kind.name : "", ddpage: page },
+    }),
+  });
+}
+
 function popupForPlace(place) {
   const box = document.createElement("div");
   box.appendChild(el("span", "popup-title", place.entity));
-  if (place.address) box.appendChild(el("span", "popup-address", place.address));
-  const facts = [place.entity_type, place.type, placeKind(place), `level ${place.level}`,
-    isSearched(place) ? "searched" : "", mergedNote(place)].filter(Boolean);
-  box.appendChild(el("div", "popup-type", facts.join(" - ")));
+  // THE ADDRESS OPENS THE ROWS: it is the line that says which of the
+  // entity's places this pin is, so it is the line that lists them.
+  if (place.address) {
+    const address = openRowsButton(place.address, `Show rows for ${place.entity}`,
+                                   () => openPlaceRows(place));
+    address.classList.add("popup-address");
+    box.appendChild(address);
+  }
+  // WHAT THE PIN IS, ONE FACT PER LINE, EACH WITH ITS NAME. "Company -
+  // Region - main location - level 1" is five values with nothing saying
+  // which is the entity's type and which the place's; a list of name and
+  // value reads without guessing.
+  box.appendChild(factList([
+    ["Entity type", place.entity_type],
+    ["Location type", place.type],
+    ["Place", place.main ? "Main location" : "Location"],
+    ["Level", isSearched(place) ? "Searched for" : String(place.level)],
+    ["Archive entries", Number(place.merged || 1) > 1 ? fmtInt(place.merged) : ""],
+  ]));
   // A POPUP THAT ENDS IN A FULL STOP IS A DEAD END. It links where the
   // answer actually is - this entity's own charts, and this entity in the
   // middle of its own graph.
@@ -713,12 +823,17 @@ function endBlock(role, name) {
  * whom - one line each, so a long name never pushes the rest out of view. */
 function relSentence(line, kind) {
   const ends = endsOf(line, kind);
-  const said = el("p", "popup-rel-said");
-  said.appendChild(el("span", "popup-rel-end", ends.source));
   // "an Investor", not "a Investor". The role names are the archive's own
   // words, so the article has to be chosen from the word rather than baked
   // into the sentence.
   const article = /^[aeiou]/i.test(kind.name || "") ? "an" : "a";
+  // THE SENTENCE OPENS ITS ROWS (openPairRows): the connections of this
+  // kind between these two, read from the end that plays the part.
+  const said = openRowsButton(null,
+    `Show rows: ${ends.source} is ${article} ${kind.name} of ${ends.target}`,
+    () => openPairRows(line, kind));
+  said.classList.add("popup-rel-said");
+  said.appendChild(el("span", "popup-rel-end", ends.source));
   said.appendChild(el("span", "popup-rel-verb", `is ${article} ${kind.name} of`));
   said.appendChild(el("span", "popup-rel-end", ends.target));
   return said;
@@ -746,8 +861,14 @@ function popupForLine(line) {
    * a divider they run together as one column of fragments, so each of the
    * last two opens with a rule (map.css: .popup-section, .popup-links). */
   const holds = el("div", "popup-section");
-  holds.appendChild(el("span", "popup-address",
-    `${line.count} ${line.count === 1 ? "connection" : "connections"} in the archive`));
+  // The count opens EVERY connection of the pair, whatever its kind; each
+  // sentence under it opens the ones of its own kind.
+  const count = openRowsButton(
+    `${line.count} ${line.count === 1 ? "connection" : "connections"} in the archive`,
+    `Show rows: every connection of ${line.from.name} and ${line.to.name}`,
+    () => openPairRows(line, null));
+  count.classList.add("popup-address");
+  holds.appendChild(count);
 
   /* A LIST OF SENTENCES, NOT A GRID OF FRAGMENTS.
    *

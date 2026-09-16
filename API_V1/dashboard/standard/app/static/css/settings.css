@@ -134,7 +134,9 @@
 
 /* ── Buckets ──────────────────────────────────────────────────────────── */
 
-.bucket-new { margin-bottom: var(--gap); }
+/* Between the search above it and the list below it, a gap either side:
+ * two bordered cards never touch. */
+.bucket-new { margin: var(--gap) 0; }
 .bucket-new .field { flex: 1 1 18rem; }
 .bucket-scope { flex: 0 1 auto; }
 

@@ -25,6 +25,9 @@
 {% block head %}
 <link rel="stylesheet" href="{{ static('vendor/leaflet/leaflet.css') }}">
 <link rel="stylesheet" href="{{ static('css/views.css') }}">
+{#- The rows behind a marker on the mini-map: its popup opens the same
+    drilldown a chart does (static/js/minimap.js), so its sheet is here. -#}
+<link rel="stylesheet" href="{{ static('css/drilldown.css') }}">
 {#- The tile server is a setting (DASHBOARD_TILE_URL); minimap.js reads it
     from here. Empty when the app is rendered without its configuration
     (a template test), and then the module falls back to the OSM default. -#}

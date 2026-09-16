@@ -13,14 +13,17 @@
  *
  *  FOUR DECISIONS.
  *
- *  1. A SUGGESTION ADDS THE MEMBER. The entity suggestions carry the type in
- *     their hint ("Apple (Company)"), which is the one piece a member needs
- *     and the one people forget. So choosing a suggestion fills the name AND
- *     the type, saves the member, empties the field and leaves the focus
- *     where it was: five members can be added without touching the mouse.
- *     Typed text with no suggestion behind it fills the name and moves the
- *     focus to the type field, because the type is the whole difference
- *     between Apple the company and Apple the fruit.
+ *  1. A SUGGESTION IS TICKED, AND THE LIST STAYS. The entity suggestions
+ *     carry the type in their hint ("Apple (Company)"), which is the one
+ *     piece a member needs and the one people forget. So every row has a
+ *     tick: ticking it saves the member with its type, the typed text and
+ *     the open list stay exactly as they are, and ticking it again removes
+ *     the member. Five members come out of one search without retyping it.
+ *     The next search leaves out what the bucket holds (`?bucket=` on the
+ *     suggestion URL), so a ticked row is not offered twice. Typed text with
+ *     no suggestion behind it fills the name and moves the focus to the type
+ *     field, because the type is the whole difference between Apple the
+ *     company and Apple the fruit.
  *
  *  2. A MEMBER IS UNDONE; A WHOLE BUCKET IS ASKED ABOUT FIRST, AND THEN
  *     UNDONE AS WELL. Removing a member is one row that the typeahead above
@@ -305,23 +308,36 @@ function memberRow(card, bucket, member) {
   return tr;
 }
 
+/* The picker's own view of the member: the suggestion list may still show
+ * the row, ticked, and a row that says "in" while the table says "out" is a
+ * lie in the reader's line of sight. Null id unticks. */
+function tellPicker(card, member, id) {
+  const picker = card._picker;
+  if (!picker) return;
+  picker.setChosen(member.name, member.type || "", id);
+  picker.forget();
+}
+
+/* Returns whether the archive agreed, so a tick that asked can be put back. */
 async function removeMember(card, bucket, member) {
   try {
     await api(`/api/buckets/${bucket.id}/members/${member.id}`, { method: "DELETE", context: false });
   } catch (err) {
-    return;
+    return false;
   }
-  const fresh = await refreshBucket(card, bucket.id);
-  if (!fresh) return;
-  showUndo(fresh.querySelector("[data-member-undo]"),
+  tellPicker(card, member, null);
+  if (!(await refreshMembers(card, bucket))) return true;
+  showUndo(card.querySelector("[data-member-undo]"),
     `${label(member)} removed from ${bucket.name}.`,
     async () => {
-      await api(`/api/buckets/${bucket.id}/members`, {
+      const answer = await api(`/api/buckets/${bucket.id}/members`, {
         method: "POST", context: false, body: { name: member.name, type: member.type || null },
       });
-      await refreshBucket(fresh, bucket.id);
+      tellPicker(card, member, answer && answer.member ? answer.member.id : null);
+      await refreshMembers(card, bucket);
       announce(`${label(member)} is back in ${bucket.name}.`);
     });
+  return true;
 }
 
 /* ── One card ────────────────────────────────────────────────────────── */
@@ -375,6 +391,16 @@ function fillCard(card, bucket) {
   del.setAttribute("aria-label", `Delete the bucket ${bucket.name}`);
   del.addEventListener("click", () => askDeleteBucket(card, bucket));
 
+  drawMembers(card, bucket);
+  wireAdd(card, bucket);
+  return card;
+}
+
+/* The member rows, the empty state and the count - the part of a card that
+ * changes when a member comes or goes. Drawn on their own so the picker
+ * above them, with its typed text and open list, is left standing. */
+function drawMembers(card, bucket) {
+  const info = kindInfo(bucket.kind || "entity");
   const body = card.querySelector("[data-members]");
   body.textContent = "";
   bucket.members.forEach((m) => body.appendChild(memberRow(card, bucket, m)));
@@ -383,9 +409,6 @@ function fillCard(card, bucket) {
   membersEmpty.textContent = emptyMembersText(info);
   card.querySelector("[data-members-caption]").textContent =
     bucket.members.length === 1 ? "1 member" : `${bucket.members.length} members`;
-
-  wireAdd(card, bucket);
-  return card;
 }
 
 /* The empty-state sentence, in the kind's own words. */
@@ -419,7 +442,35 @@ function wireAdd(card, bucket) {
   typeField.id = `member-type-${bucket.id}`;
   typeLabel.htmlFor = typeField.id;
 
-  initTypeahead(nameField);
+  // Ticks on the rows (typeahead.js: data-multi). The picker is kept on the
+  // card so the Remove buttons in the table and the undo strip can untick
+  // and re-tick the row that is still on screen.
+  nameField.dataset.multi = "true";
+  const picker = initTypeahead(nameField);
+  card._picker = picker;
+
+  nameField.addEventListener("typeahead:toggle", async (e) => {
+    const { value, hint, checked, memberId } = e.detail;
+    // For an entity the hint IS the type; for every other kind it is empty
+    // or names the bucket that already holds the value, which addMember
+    // refuses - and then the row goes back to unticked.
+    const type = info.typed ? hint : "";
+    if (checked) {
+      const member = await addMember(card, bucket, value, type,
+        { keepFocus: true, keepField: true, hint: info.typed ? "" : hint });
+      picker.setChosen(value, hint, member ? member.id : null);
+      picker.forget();
+      return;
+    }
+    if (!memberId) {
+      // Ticked twice before the archive answered the first tick: the add is
+      // still on its way and will tick the row when it lands.
+      picker.setChosen(value, hint, null);
+      return;
+    }
+    const gone = await removeMember(card, bucket, { id: memberId, name: value, type });
+    if (!gone) picker.setChosen(value, hint, memberId);
+  });
 
   nameField.addEventListener("typeahead:choose", (e) => {
     const { value, hint, typed } = e.detail;
@@ -484,6 +535,9 @@ function addStatus(card, text, failed) {
  * hint of a value that is already spoken for. */
 const TAKEN = /^in the bucket [\u201c"](.+)[\u201d"]$/;
 
+/* Returns the member the archive made ({id, name, type}), or null when
+ * nothing was added - the caller that ticked a row needs the id to untick
+ * it. `opts.keepField` leaves the typed text and the list as they are. */
 async function addMember(card, bucket, name, type, opts = {}) {
   addStatus(card, "");
   const nameField = card.querySelector("input[data-typeahead]");
@@ -496,14 +550,15 @@ async function addMember(card, bucket, name, type, opts = {}) {
     addStatus(card, `Not added - ${name} is already in the bucket ${taken[1]}. `
       + "A value belongs to one bucket of its kind; remove it there first.", true);
     if (nameField) nameField.focus();
-    return;
+    return null;
   }
+  let answer;
   try {
-    await api(`/api/buckets/${bucket.id}/members`, {
+    answer = await api(`/api/buckets/${bucket.id}/members`, {
       method: "POST", context: false, body: { name, type: type || null },
     });
   } catch (err) {
-    if (isAbort(err)) return;
+    if (isAbort(err)) return null;
     // "Apple is already in this bucket - the same name and type can only be
     // in a bucket once" is an answer, not a fault: the reader has to see it
     // where they pressed, and the cursor goes back into the field so the
@@ -514,18 +569,15 @@ async function addMember(card, bucket, name, type, opts = {}) {
       nameField.setAttribute("aria-invalid", "true");
       nameField.focus();
     }
-    return;
+    return null;
   }
   if (nameField) nameField.removeAttribute("aria-invalid");
-  clearAdd(card);
-  const fresh = await refreshBucket(card, bucket.id);
+  // A tick leaves the typed text where it is: the next tick needs it.
+  if (!opts.keepField) clearAdd(card);
+  await refreshMembers(card, bucket);
   announce(`${type ? `${name} (${type})` : name} added to ${bucket.name}.`);
-  if (opts.keepFocus && fresh) {
-    // The card is a NEW node (see refreshBucket), so the field to put the
-    // cursor back into is that card's, not the one that was clicked.
-    const again = fresh.querySelector("input[data-typeahead]");
-    if (again) again.focus();
-  }
+  if (opts.keepFocus && nameField) nameField.focus();
+  return answer && answer.member ? answer.member : null;
 }
 
 function clearAdd(card) {
@@ -719,7 +771,37 @@ function matchText(data) {
   return head;
 }
 
-/* One bucket, drawn again from a fresh clone of the template.
+/* The bucket's members, read again and drawn into the card that is there.
+ *
+ * Only the rows change: the picker keeps its typed text, its open list and
+ * its ticks, which is what lets one search feed several ticks. The `bucket`
+ * object the card's handlers close over is updated in place, so "Delete
+ * Apple and its 3 members?" counts the member just added. Returns the
+ * bucket as the archive answered it, or null when it is gone. */
+async function refreshMembers(card, bucket) {
+  const data = await api("/api/buckets", { channel: `bucket-${bucket.id}`, context: true });
+  const fresh = (data.items || []).find((b) => b.id === bucket.id);
+  if (!fresh) {
+    await load();
+    return null;
+  }
+  // The list the FILTER draws from has to move with the card, or setting a
+  // filter would redraw the bucket as it stood before the member was added.
+  allBuckets = data.items || [];
+  Object.assign(bucket, fresh);
+  drawMembers(card, bucket);
+  // NOT AWAITED. The count is one statement per member over the whole
+  // archive and takes seconds on a large one; the member is in the bucket
+  // the moment the rows are drawn, and a tick that had to wait for the
+  // count before it could be taken back again would look stuck. The count
+  // arrives when it arrives, and says so meanwhile (countBucket).
+  countBucket(card, bucket);
+  return fresh;
+}
+
+/* One bucket, drawn again from a fresh clone of the template - for a change
+ * that reaches every part of the card, the scope. A member coming or going
+ * takes refreshMembers() above instead.
  *
  * NOT by filling the card that is already there: fillCard() attaches the
  * listeners, and running it twice over the same node leaves two of each -
@@ -746,6 +828,10 @@ async function refreshBucket(card, id) {
 
 async function countBucket(card, bucket) {
   const box = card.querySelector("[data-matches]");
+  // Present tense while the archive counts: a number from before the
+  // change would read as the answer to the bucket as it is now.
+  box.textContent = "Counting…";
+  box.classList.remove("is-warning");
   try {
     const data = await api("/api/buckets/resolve", {
       params: { id: String(bucket.id) }, channel: `resolve-${bucket.id}`, quiet: true, context: true,
