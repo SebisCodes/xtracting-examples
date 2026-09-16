@@ -312,7 +312,7 @@ not make it lawful to keep or process what is on it.
 
 **You are responsible for the sites you crawl.** Every request carries your
 `CRAWLER_USER_AGENT`, comes from your address, and was configured by somebody
-in your organisation. Nobody here knows which sites you added, and no default
+in your organization. Nobody here knows which sites you added, and no default
 can decide for you whether a site may be read by a program. Read the terms of
 the sites you watch, keep the intervals slow, and take a page out when its
 operator asks - the address in the user agent exists so that they can ask.

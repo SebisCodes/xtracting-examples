@@ -9,7 +9,7 @@ match no rule - and it is built from the preseed's connection types
 (tests/preseed/preseed.py) plus generic business vocabulary: supplier,
 customer, subsidiary, regulator, partner, investor, owner, competitor,
 employer and their kin. It holds no name of a real person, place or
-organisation. What the coverage test needs from it is only the shape: the
+organization. What the coverage test needs from it is only the shape: the
 suggestion rules cover the bulk of a realistic corpus and every rule earns
 its place by matching something.
 

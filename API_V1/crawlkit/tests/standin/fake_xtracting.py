@@ -405,7 +405,7 @@ def fake_result(source: str, content: str) -> dict:
             }],
             "Entities": [{
                 "id": "ent-1", "name": "Test entry", "sourceid": "src-1",
-                "type": "Organisation", "description": "Test",
+                "type": "Organization", "description": "Test",
                 "locations": [{"name": "Zurich", "type": "City",
                                "address": "Zurich, ZH, Switzerland",
                                "latitude": 47.37, "longitude": 8.54}],

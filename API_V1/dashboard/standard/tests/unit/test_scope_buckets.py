@@ -299,7 +299,7 @@ def test_location_scope_tries_parts_then_substring():
 # against a real archive.
 
 def _rows(*members):
-    return [{"id": 7, "name": "Organisations", "project": "_preseed Alpha",
+    return [{"id": 7, "name": "Organizations", "project": "_preseed Alpha",
              "member": m, "member_type": None} for m in members]
 
 
@@ -340,7 +340,7 @@ def test_a_bucket_of_any_kind_wins_over_the_literal_term():
     for kind in BUCKET_KINDS:
         terms = resolve_terms(FakeConn(_kind_handler()), "_preseed Alpha", kind, "Unternehmen")
         assert terms.match == "bucket", kind
-        assert terms.label == "Organisations", kind
+        assert terms.label == "Organizations", kind
         assert terms.values == ["Company", "Unternehmen"], kind
         assert terms.grouping.source == "bucket"
 
@@ -381,7 +381,7 @@ def test_a_grouping_with_no_members_groups_nothing():
 def test_the_member_index_says_which_bucket_holds_a_value():
     conn = FakeConn(_kind_handler())
     assert member_index(conn, "p", "entity_type") == {
-        "company": "Organisations", "unternehmen": "Organisations"}
+        "company": "Organizations", "unternehmen": "Organizations"}
 
 
 def test_a_colour_group_is_read_where_a_bucket_would_be():
@@ -402,7 +402,7 @@ def test_the_type_axis_matches_a_list_of_values_not_a_pattern():
     conn = FakeConn(_kind_handler())
     sc = resolve_scope(conn, Ctx(), "entity", "Unternehmen", axis="type")
     assert sc.resolved["axis"] == "type" and sc.resolved["match"] == "bucket"
-    assert sc.resolved["label"] == "Organisations"
+    assert sc.resolved["label"] == "Organizations"
     assert sc.resolved["values"] == ["Company", "Unternehmen"]
     assert sc.params["sc_vals"] == ["company", "unternehmen"]
     body = render(sc.ent_cte)
