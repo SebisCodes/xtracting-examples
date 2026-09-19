@@ -543,6 +543,18 @@ away. A dialog is not a view, and a rule that stops at its edge is how
 `margin` written for a block button under the rows, carried into a toolbar
 that never measured it.
 
+**A phone gets the same pages, folded.** Every view is laid out for 1024 px
+and up; under 48 rem `_layout.html` loads one more sheet, `phone.css`, last
+and only there, so nothing in it can reach a laptop. What it changes: the
+top bar becomes the brand and a **Menu** button, and the four selectors,
+Print, Export and the twelve views open in one panel under it; a form's
+fields take a line each, the two dates of a period share one; every table
+scrolls sideways inside its card and draws a shadow at the edge it continues
+past, with no cell narrower than a word; a watched page's actions stand
+under its name instead of beside it; a dialog is the whole screen. Nothing
+is hidden - a table that does not fit is scrolled, not cut. The sheet is
+one section per view, in the order of the navigation.
+
 **Print is a supported output, not a screenshot.** `print.css` drops the
 navigation, the toolbars and the suggestion lists, keeps cards from being cut
 across a page break, and fills a header line with view, project, language,

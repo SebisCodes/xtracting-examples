@@ -40,6 +40,13 @@
       configuration (a template test). -#}
   <meta name="xtracting-url" content="{{ request.app.state.cfg.xtracting_url if request.app.state.cfg is defined else '' }}">
   {% block head %}{% endblock %}
+  {#- THE PHONE SHEET COMES LAST, after a view's own stylesheet, because it
+      is written at the same specificity as the rules it narrows and only
+      source order lets it win. The media condition is on the link, so a
+      laptop never downloads it and nothing in it can reach a desktop
+      layout: everything under 48rem is a phone or a tablet held upright,
+      and css/phone.css says what changes there. -#}
+  <link rel="stylesheet" href="{{ static('css/phone.css') }}" media="screen and (max-width: 48rem)">
 </head>
 {#- THE SERVER'S RESOLVED CHOICE, ON THE BODY. The perspective may come from
     a cookie rather than from the URL, and layout.js mirrors it into the URL
@@ -54,6 +61,21 @@
     <div class="topbar-inner">
       <a class="topbar-brand" href="/">Xtracting <small>archive</small></a>
 
+      {#- THE MENU BUTTON, FOR A PHONE. Under 48rem the selector and the
+          twelve view links measure four screens' worth of chrome above the
+          first heading, so there they fold into one panel behind this
+          button: three bars and the word, because a glyph alone is a
+          memory test (the nav's own comment says so). app.css hides the
+          button on every wider screen and css/phone.css shows it; the
+          wrapper `.topbar-menu` around the selector and the nav is
+          `display: contents` there, so the flex layout of the bar is the
+          one it has always been. layout.js toggles `aria-expanded`, and
+          the panel's visibility follows that attribute alone, so what a
+          screen reader is told and what the eye sees cannot disagree. -#}
+      <button type="button" class="topbar-menu-button" id="topbar-menu-button"
+              aria-controls="topbar-menu" aria-expanded="false" title="Menu">{{ icon("menu") }}Menu</button>
+
+      <div class="topbar-menu" id="topbar-menu">
       {#- THE FIRST CONTROL ROW A READER MEETS IS HELD TO THE TOOLBAR RULE.
           It carries `.toolbar`, so it is measured like the ten underneath
           it (at 1024x768 and 1440x900): label above control, one
@@ -214,6 +236,7 @@
             popup's links copy their arrow from. -#}
         <span data-view="__newtab" hidden>{{ icon("newtab") }}</span>
       </nav>
+      </div>
     </div>
   </header>
 

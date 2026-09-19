@@ -240,13 +240,15 @@
     routers/pages.py says why. `newtab` is the one glyph that is not a view: it
     goes on a link that opens in a new tab, next to that view's own icon,
     because "where this goes" and "it will not take this page away from you"
-    are two different promises.
+    are two different promises. `menu` is the other: the three bars on the
+    button that opens the top bar's panel on a phone (_layout.html).
 
     NO COMMENT INSIDE THE DICT. A Jinja comment between two entries of the set
     literal below is a template that does not compile, and the page that uses it
     answers 500. tests/unit/test_templates_compile.py is the guard. -#}
 {%- set paths = {
   "numbers": "M4 6h16M4 12h16M4 18h16",
+  "menu":    "M4 6h16M4 12h16M4 18h16",
   "enlarge": "M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7",
   "image":   "M12 4v10M8 11l4 4 4-4M5 19h14",
   "camera":  "M4 8h3l2-2h6l2 2h3v11H4zM12 16a3.5 3.5 0 100-7 3.5 3.5 0 000 7",

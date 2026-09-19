@@ -1,0 +1,319 @@
+/* ==========================================================================
+ *  A PHONE, OR A TABLET HELD UPRIGHT.
+ *
+ *  _layout.html loads this sheet LAST and only under 48rem
+ *  (`media="screen and (max-width: 48rem)"` on the link), so nothing in it
+ *  can reach a laptop and nothing in it needs more specificity than the
+ *  rule it narrows: same selector, later in the cascade, wins. Every other
+ *  stylesheet is written for the screens this dashboard is laid out for
+ *  (1024x768 and up) and stays as it is; this one says only what a 390 px
+ *  screen changes, view by view, in the order of the top bar.
+ *
+ *  THREE THINGS A SMALL SCREEN CANNOT AFFORD, and each block below spends
+ *  them differently:
+ *
+ *    width    - a column beside a column becomes a column under it, a table
+ *               scrolls sideways and SAYS so, nothing wider than the screen
+ *               is ever laid out at its natural width;
+ *    height   - the top bar folds into one line and a button, air between
+ *               blocks comes down, dialogs take the whole screen;
+ *    the hand - every target keeps its 44 px, and the first row of a form is
+ *               the first thing under the heading, not the fifth.
+ *
+ *  Nothing here hides content. A table that does not fit is scrolled, not
+ *  cut; the navigation is behind a button, not gone; a label that would
+ *  wrap is allowed to.
+ * ========================================================================== */
+
+/* ── The frame: main, cards, headings ────────────────────────────────── */
+
+/* The gutter comes down from 16 px to 12 and the card's side padding from
+ * 20 to 14: 390 px is the whole width there is, and a table in a card has
+ * 316 of them at the laptop's paddings, 336 at these. The gap between the
+ * blocks of a view is the one the 1196 px rule already chose. */
+.main { padding: 0.75rem; }
+.card { padding: 0.875rem; }
+h1 { font-size: 1.5rem; }
+.page-header { gap: 0.375rem 0.75rem; }
+
+/* The tiles of the Dashboard and the cards of Diagrams: one column, and the
+ * grid's floor comes down to the screen so the one column is not wider
+ * than it. `min(100%, ...)` is the same construction .grid--two uses. */
+.grid--tiles { grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); }
+.grid--cards { grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); }
+#stats.grid--tiles { grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); }
+
+/* A chip or a tag that carries an identifier ("entn:6fa4162b6fe332eba7…")
+ * is wider than the card on a phone. It breaks inside the word rather than
+ * over the card's edge: an id has no natural break, `anywhere` gives it
+ * one, and the chip is allowed to be as wide as its line and no wider. */
+.chip, .tag, .pill { max-width: 100%; overflow-wrap: anywhere; white-space: normal; }
+
+/* ── The top bar ─────────────────────────────────────────────────────── */
+
+/* ONE LINE AND A BUTTON. The brand at the left, the Menu button at the
+ * right, and everything else - the four selects, Print, Export, the way to
+ * Xtracting and the twelve views - in a panel that opens under them. On a
+ * 390 px screen the unfolded bar is 900 px tall, a whole screen of chrome
+ * above the first heading. */
+.topbar-inner {
+  padding: 0.375rem 0.75rem;
+  gap: 0.5rem 0.75rem;
+}
+.topbar-brand { margin-right: 0; }
+/* The button: the same drawing as every secondary button, so it reads as
+ * one, with the three bars before the word (the nav's rule: never the
+ * glyph alone). `margin-left: auto` puts it at the bar's right edge. */
+.topbar-menu-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-height: var(--control-h);
+  padding: 0 0.75rem;
+  margin-left: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--accent);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+.topbar-menu-button:hover { background: var(--accent-tint); color: var(--accent-strong); }
+.topbar-menu-button .icon { width: 20px; height: 20px; }
+.topbar-menu-button[aria-expanded="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+/* THE PANEL. A box now, not `contents`: a line of its own under the brand,
+ * shown while the button says it is open (layout.js writes the attribute,
+ * nothing else does). The selector and the nav stack inside it. */
+.topbar-menu {
+  display: grid;
+  gap: 0.75rem;
+  flex-basis: 100%;
+  padding: 0.5rem 0 0.25rem;
+  border-top: 1px solid var(--line-soft);
+}
+.topbar-menu-button[aria-expanded="false"] + .topbar-menu { display: none; }
+/* The four selects: one under the other, each the full width, so a project
+ * name reads in full instead of as its first six letters. The two button
+ * groups share a line under them. The ID rule in app.css caps "Show only"
+ * at 12rem and the 1196 px rule at 7rem; both are named here so that the
+ * cap comes off with the same weight it was put on. */
+.topbar-tools { margin-left: 0; gap: 0.5rem 0.75rem; }
+.topbar-tools .field { flex: 1 1 100%; }
+.topbar-tools .field--action { flex: 0 1 auto; }
+.topbar-tools select,
+#ctx-importance { width: 100%; min-width: 0; max-width: none; }
+/* The views: two columns of 44 px rows a thumb can hit, the current one
+ * filled as it is on a laptop. Two columns and not one because the panel
+ * opens under four selects, and twelve rows of one would put the last
+ * views a screen below the button that opened them; two columns are six
+ * rows. The glyphs come back here: the 1279 px rule hides them where
+ * twelve of them would not fit one line, and a column has the room. */
+.topbar-nav {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.125rem 0.5rem;
+}
+.nav-button { width: 100%; padding: 0 0.625rem; }
+.nav-button .icon { display: inline-block; }
+/* The Export menu drops from the LEFT edge of its button here. app.css
+ * hangs it from the right edge, which on a laptop is where the button
+ * ends the bar; in the panel the button is near the left edge, and a menu
+ * hung from its right edge is off the screen by half its width. */
+.export-menu-items { left: 0; right: auto; }
+
+/* ── Tables, wherever they are ───────────────────────────────────────── */
+
+/* A TABLE THAT IS WIDER THAN THE SCREEN SCROLLS SIDEWAYS AND SAYS SO.
+ *
+ * Every table stands in a `.table-scroll` box (app.css), so the scroll is
+ * already there; what a phone adds is the SIGN that it is there. Four
+ * background layers do it without a script: two shadows that stay put at
+ * the box's edges (`scroll`) and two covers in the surface colour that
+ * travel with the content (`local`). At the start the left cover sits on
+ * the left shadow and the right shadow shows; scrolled to the end, the
+ * other way round; when nothing overflows both covers sit on both shadows
+ * and nothing shows at all. The Log draws the same sign on its runs table
+ * with a script and a wrapper; this is the same sign for the tables the
+ * script does not know, including the ones built later by a module.
+ *
+ * The cells keep the table's own background - none - so the shadow is
+ * seen through them. A header cell has one (app.css) and hides it for one
+ * line, which is the price of not restyling every header.
+ *
+ * A CELL IS NEVER CRUSHED to one word per line. The browser's table layout
+ * squeezes the narrowest column first when the table is told it is 100 %
+ * wide: eight characters for the first column of a bucket's members, with
+ * a 40-character name in it. A floor of 8rem per text cell means the table
+ * grows and scrolls instead; the numbers keep their own width because they
+ * are short. */
+.table-scroll,
+.tables-scroll {
+  /* The box is the containing block of what stands in it. A `.visually-
+   * hidden` label inside a scrolled-away cell is positioned absolutely,
+   * and without this it is placed against the page - 15 px past the right
+   * edge of the screen, which gives the whole page a sideways scroll of
+   * 15 px that nothing on it explains. */
+  position: relative;
+  background:
+    linear-gradient(to right, var(--surface) 35%, rgba(255, 255, 255, 0)) 0 0 / 2.5rem 100% no-repeat local,
+    linear-gradient(to left, var(--surface) 35%, rgba(255, 255, 255, 0)) 100% 0 / 2.5rem 100% no-repeat local,
+    linear-gradient(to right, rgba(20, 30, 50, 0.2), rgba(20, 30, 50, 0)) 0 0 / 1rem 100% no-repeat scroll,
+    linear-gradient(to left, rgba(20, 30, 50, 0.2), rgba(20, 30, 50, 0)) 100% 0 / 1rem 100% no-repeat scroll;
+  /* One finger's worth of momentum on iOS. */
+  -webkit-overflow-scrolling: touch;
+}
+/* The Log's runs table draws its own sign (logs.css, `.table-scroll-wrap`),
+ * so its box does not draw this one on top of it. */
+.table-scroll-wrap > .table-scroll { background: none; }
+.table th:not(.num):not(.dd-num):not(.about-tick),
+.table td:not(.num):not(.dd-num):not(.about-tick) { min-width: 8rem; }
+
+/* ── Forms and toolbars ──────────────────────────────────────────────── */
+
+/* A field takes the line. The toolbar's 14rem basis puts two fields side
+ * by side at 390 px and a select with "Critical Importance and above" in
+ * it shows "Critical I"; one per line shows the value. The pair of dates
+ * (From / To) is the exception and keeps its two columns: "mm/dd/yyyy" is
+ * short, and the pair reads as one span. */
+.toolbar :where(.field) { flex: 1 1 100%; }
+.toolbar :where(.field--fixed) { flex: 0 1 auto; }
+.toolbar :where(.field.coord-field),
+.toolbar :where(.field:has(> input[type="date"])) { flex: 1 1 8rem; }
+/* A date input fills its half of the line. The Map and the Graph give
+ * theirs a fixed 9 or 10rem (their toolbars share a laptop's row with
+ * the switches); the phone's date control draws a calendar mark inside
+ * the box, and at 9rem the mark sits on the border. Both selectors are
+ * repeated so that the width comes off with the weight it was put on. */
+input[type="date"],
+.map-toolbar > .field--date input[type="date"],
+.graph-toolbar > .field--date input[type="date"] { width: 100%; min-width: 9.5rem; }
+/* The date presets start at the left, under the dates, like every other
+ * row of a phone's form; right-aligned as a group they are one button per
+ * line down the right edge, which reads as four rows and not one group. */
+.preset-row { justify-content: flex-start; }
+/* The Search and Clear pair is the full width of the form: the two
+ * buttons a thumb presses most, at the size a thumb wants. A status word
+ * beside them ("Searching...") wraps to its own line under. */
+.query-actions[data-search-actions] { flex-wrap: wrap; }
+.query-actions[data-search-actions] > .button { flex: 1 1 8rem; justify-content: center; }
+/* A row of radio buttons or checkboxes wraps two per line rather than
+ * seven per column; the gap between them is what keeps "Market Insights"
+ * and "Ratings" from reading as one label. */
+.kind-choices { gap: 0.25rem 1.25rem; }
+
+/* ── Dashboard ───────────────────────────────────────────────────────── */
+
+/* The activity feed's row: the time under the text rather than beside it
+ * when the text is a title, a chip and an id. `auto` beside `1fr` gives
+ * the time a column and the text 240 px. */
+.list-item { grid-template-columns: minmax(0, 1fr); gap: 0.125rem; }
+.list-time { white-space: normal; }
+
+/* ── Diagrams ────────────────────────────────────────────────────────── */
+
+/* The Search and Clear pair takes the line, as on every other form here.
+ * diagrams.css sizes the pair to its content so that the sentence about
+ * the search can stand beside it on a laptop; on a phone the sentence has
+ * a line of its own anyway, and a content-sized box puts the two buttons
+ * one under the other, each the width of the box. */
+.diagrams-search > .query-actions { flex: 1 1 100%; }
+
+/* ── Map, Heatmap, Graph ─────────────────────────────────────────────── */
+
+/* The map toolbar's own widths, said again at this sheet's weight: the
+ * search field takes the line (map.css gives it a 10rem basis so that it
+ * shares a laptop's row with the switches), and a date field is half a
+ * line, as in every other form here. */
+.map-toolbar > .typeahead.field { flex: 1 1 100%; }
+.map-toolbar > .field--date { flex: 1 1 8rem; }
+
+/* The progress bar and its sentence: one under the other. Beside each
+ * other the sentence has 150 px and breaks into five lines against a bar
+ * that takes the rest. */
+.map-progress { flex-wrap: wrap; }
+.map-progress progress { flex: 1 1 100%; }
+.map-progress-text { flex: 1 1 100%; }
+/* The map's height on a phone: the screen minus the bar and the form's
+ * first row, so that a searched-for place is on screen with the controls
+ * that found it. The laptop's clamp starts at 22rem, a screen and a half
+ * here. */
+.map-canvas { height: clamp(16rem, 55vh, 30rem); }
+
+/* ── Buckets, Colours ────────────────────────────────────────────────── */
+
+/* A bucket's head: the title takes the line and the actions (Delete
+ * bucket) stand under it at the left, where every other action on this
+ * screen stands. `margin-left: auto` puts "Delete bucket" alone at the
+ * right edge of a 340 px card. */
+.bucket-title { flex: 1 1 100%; max-width: none; }
+.bucket-head-actions { margin-left: 0; }
+/* A member's name is the column a reader came for: wider than the floor,
+ * so "Alternative für Deutschland (AfD)" is two lines and not four. */
+.bucket-members td:first-child, .bucket-members th:first-child { min-width: 11rem; }
+/* The Group select in the types table keeps its 12rem: the column is what
+ * scrolls, the select is not what shrinks. Nothing to change; named here
+ * so the next reader does not look for the rule. */
+
+/* ── Watchlist ───────────────────────────────────────────────────────── */
+
+/* A WATCHED PAGE IS ONE COLUMN. Its name and host on the first lines, the
+ * schedule switch and the two buttons on a row under them, then the flags
+ * and the counts. Two columns give the name 120 px, which wraps a long
+ * name letter by letter beside three stacked buttons. */
+.source-item { grid-template-columns: minmax(0, 1fr); }
+/* The side column becomes a row: the switch first, then Test and Open,
+ * each as wide as its words plus room for the mark, wrapping when the
+ * three do not fit one line. The 13rem floor is the column's, not the
+ * buttons'. */
+.source-side {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  min-width: 0;
+  text-align: left;
+}
+.source-side .button { width: auto; flex: 1 1 auto; padding-right: 2rem; }
+.source-side .enable-check { flex: 1 1 100%; justify-content: flex-start; }
+.source-name { font-size: 1.0625rem; }
+
+/* THE LINK PICKER'S GROUP HEAD: the name may wrap, and the count stands
+ * under it rather than on it. The head is a grid of tick, name and count;
+ * the name is a button whose text is a flex item, and a flex item's floor
+ * is its longest word - "/news/archive.php?" - which on a 340 px dialog
+ * is wider than the column, so the name runs on under the count.
+ * `min-width: 0` on the button and `anywhere` on the word give the column
+ * a floor of nothing, and the count takes the next row of the same column
+ * so it is read after the name it counts. */
+.group-head { grid-template-columns: auto minmax(0, 1fr); }
+.group-toggle { min-width: 0; text-align: left; }
+.group-toggle > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+.group-count { grid-column: 2; justify-self: start; padding-left: 0.5rem; white-space: normal; }
+.group-examples { grid-column: 1 / -1; }
+
+/* ── Dialogs ─────────────────────────────────────────────────────────── */
+
+/* A DIALOG IS THE SCREEN. Half a rem of margin, the rest for the rows: the
+ * drilldown table inside scrolls sideways in the dialog's body, and every
+ * pixel given to a margin is a column the reader does not see. The header
+ * keeps its X at the top right, where every dialog has it. */
+dialog.dialog,
+dialog.dialog.dialog--wide,
+dialog.dialog.dialog--chart {
+  width: calc(100vw - 1rem);
+  max-height: calc(100vh - 1rem);
+  max-width: none;
+}
+/* The drilldown keeps its content height (drilldown.css: two rows are two
+ * rows tall) and the chart popup keeps the whole screen; only the margin
+ * round each comes down. The doubled class is the weight drilldown.css
+ * gave its own rules. */
+dialog.dialog.dialog--wide { max-height: calc(100vh - 1rem); }
+dialog.dialog.dialog--chart { height: calc(100vh - 1rem); }
+.dialog-header { padding: 0.75rem 0.875rem; }
+.dialog-body { padding: 0.75rem 0.875rem; }
+.dialog-footer, .dialog-actions { flex-wrap: wrap; }
+/* The subtitle under a dialog's title is a paragraph on a laptop and a
+ * third of the screen on a phone. It stays, and it stays whole - what
+ * comes down is the space around it. */
+.dialog-subtitle { font-size: 0.9375rem; }

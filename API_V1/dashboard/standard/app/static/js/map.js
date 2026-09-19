@@ -499,16 +499,28 @@ function createMap() {
     const rect = box.getBoundingClientRect();
     const frame = map.getContainer().getBoundingClientRect();
     if (!rect.height || !frame.height) return;
-    // A popup taller than the map cannot be brought inside, and shoving it
-    // about would only swap which end is cut off. It scrolls inside itself
-    // instead - see the size block above.
+    // A popup taller (or wider) than the map cannot be brought inside, and
+    // shoving it about would only swap which end is cut off. It scrolls
+    // inside itself instead - see the size block above.
     const pad = 8;
-    if (rect.height > frame.height - 2 * pad) return;
+    let dx = 0;
     let dy = 0;
-    if (rect.top < frame.top + pad) dy = rect.top - (frame.top + pad);
-    else if (rect.bottom > frame.bottom - pad) dy = rect.bottom - (frame.bottom - pad);
-    if (!dy) return;
-    const centre = map.project(map.getCenter()).add(L.point(0, dy));
+    if (rect.height <= frame.height - 2 * pad) {
+      if (rect.top < frame.top + pad) dy = rect.top - (frame.top + pad);
+      else if (rect.bottom > frame.bottom - pad) dy = rect.bottom - (frame.bottom - pad);
+    }
+    // SIDEWAYS TOO. A popup is sized to the map's width less 40 px, so it
+    // always fits; what does not always fit is WHERE it opens - centred on
+    // a pin near the left or right edge, half of it is off the map. On a
+    // laptop that is a pin in the last 150 px of a 900 px map; on a phone,
+    // where the map is 340 px wide and the popup 300, it is nearly every
+    // pin. The same correction, on the other axis.
+    if (rect.width <= frame.width - 2 * pad) {
+      if (rect.left < frame.left + pad) dx = rect.left - (frame.left + pad);
+      else if (rect.right > frame.right - pad) dx = rect.right - (frame.right - pad);
+    }
+    if (!dx && !dy) return;
+    const centre = map.project(map.getCenter()).add(L.point(dx, dy));
     map.setView(map.unproject(centre), map.getZoom(), { animate: false });
   }
 

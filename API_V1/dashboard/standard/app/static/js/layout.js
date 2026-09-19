@@ -32,6 +32,10 @@
  *      whichever page the reader happens to be on, so it is answered on all
  *      of them.
  *
+ *    - the Menu button of a phone. Under 48rem the selector and the nav
+ *      are one panel behind it (css/phone.css); this file only turns
+ *      `aria-expanded` on the button, and the panel follows the attribute.
+ *
  *  Loaded as a module from _layout.html; nothing here depends on a view.
  * ========================================================================== */
 
@@ -291,10 +295,31 @@ function initMenus() {
   });
 }
 
+/* THE PANEL OPENS AND CLOSES ON ONE ATTRIBUTE. The button says whether the
+ * panel is open (`aria-expanded`), the stylesheet shows the panel while it
+ * says so, and nothing else is written - so a screen reader and the eye
+ * are told the same thing by the same bit. Escape closes it and hands the
+ * focus back to the button, like the Export menu. On a wide screen the
+ * button is not drawn (app.css) and the panel is simply the bar. */
+function initTopbarMenu() {
+  const button = document.getElementById("topbar-menu-button");
+  const panel = document.getElementById("topbar-menu");
+  if (!button || !panel) return;
+  const isOpen = () => button.getAttribute("aria-expanded") === "true";
+  const setOpen = (open) => button.setAttribute("aria-expanded", open ? "true" : "false");
+  button.addEventListener("click", () => setOpen(!isOpen()));
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || !isOpen()) return;
+    setOpen(false);
+    button.focus();
+  });
+}
+
 function init() {
   readState();
   decorateNav();
   initMenus();
+  initTopbarMenu();
   initPerspective();
   loadProjects();
   initPrintExport();
