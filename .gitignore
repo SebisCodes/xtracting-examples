@@ -18,3 +18,8 @@ __pycache__/
 # Editors
 .idea/
 .vscode/
+
+# Working files of an AI-assisted project setup (AGENTS.md): test documents,
+# expectations and the results of each round. They are the person's material,
+# not part of this repository.
+setup/

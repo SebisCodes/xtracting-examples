@@ -56,6 +56,20 @@ and the component itself - with its `docs/` - is `API_V1/dashboard/standard/`.
 [`API_V1/README.md`](API_V1/README.md) says how the components fit together
 and in which order to start them.
 
+## Setting up a project with an AI agent
+
+An AI coding agent such as Claude Code can set up and test a project's
+configuration for you: open this repository in it, give it an API key with
+*Extract data* and *Edit project*, and describe what you want to extract. It
+follows [`AGENTS.md`](AGENTS.md), asks for your approval at the end and then
+switches the key off.
+
+| File | What it answers |
+|---|---|
+| [`AGENTS.md`](AGENTS.md) | the procedure the agent follows, and its rules |
+| [`docs/API.md`](docs/API.md) | every API endpoint, short enough to read in one go |
+| [`docs/PROJECT_CONFIGURATION.md`](docs/PROJECT_CONFIGURATION.md) | how to write objects of interest and perspectives |
+
 ## Requirements
 
 One of Docker, Podman or nerdctl. About 200 MB of disk for the archive to
