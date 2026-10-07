@@ -56,10 +56,10 @@ first.**
 The project's configuration and every key on it:
 `projectId`, `name`, `interestEntities [{name, description}]`,
 `perspectives [{name, description}]`, `defaultHighThinking`,
-`defaultTranslationLanguages`, `aiModelId`, `aiServerId`,
+`defaultQuality`, `defaultQualityObjects`, `defaultTranslationLanguages`, `aiModelId`, `aiServerId`,
 `translationModelId`, `modelLocked`, `modelChangedFromId`, `confidential`,
 `openTasks` (tasks still queued or running), and
-`apiKeys [{prefix, name, isActive, canExtract, canReadProject, canEditProject, highThinking, translationLanguages, mirrorLanguages, aiModelId, aiServerId, ..., url}]`.
+`apiKeys [{prefix, name, isActive, canExtract, canReadProject, canEditProject, highThinking, quality, qualityObjects, translationLanguages, mirrorLanguages, aiModelId, aiServerId, ..., url}]`.
 
 ### `PATCH /api/v1/project` - Edit project
 Changes the configuration. Every field is optional; send only what changes.
@@ -69,6 +69,8 @@ Changes the configuration. Every field is optional; send only what changes.
 | `interestEntities` | `[{name, description}]` | the objects of interest - **the whole list, replacing the stored one** |
 | `perspectives` | `[{name, description}]` | the perspectives - the whole list, replacing the stored one |
 | `defaultHighThinking` | boolean | "Complex Documents": more reasoning, higher price |
+| `defaultQuality` | `EFFICIENT` \| `BALANCED` \| `DETAILED` | how an extraction runs: one AI call; one call per object after the source and the entities; or one call per entity and object plus one per pair of entities for the connections. Every call is charged, so `BALANCED` and `DETAILED` can cost far more than the price shown, which is always the `EFFICIENT` maximum - leave to the person |
+| `defaultQualityObjects` | string[] | what `BALANCED` and `DETAILED` extract besides the source and the entities: any of `ratings`, `events`, `marketinsights`, `attributes`, `connections`; one left out comes back as `[]` |
 | `defaultTranslationLanguages` | string[] | output languages besides English, names as in `translationTargets` at `https://xtracting.io/api/public/languages` |
 | `aiModelId`, `aiServerId`, `translationModelId`, `modelLocked` | | the model; changing it changes the price - leave to the person |
 | `applyToAllApiKeys` | boolean | copy the project's run settings onto every key that may extract |
@@ -84,14 +86,15 @@ dashboard.
 
 Which settings a job uses: the objects of interest and perspectives are the
 project's, read **when a worker picks the task up** (so change them only with
-an empty queue). Model, Complex Documents and languages are copied onto each
+an empty queue). Model, Complex Documents, Quality and languages are copied onto each
 key when it is created; `applyToAllApiKeys` brings the keys in line.
 
 Response: the configuration as in `GET`, plus `keysUpdated` /
 `keysDeactivated` when those were asked for.
 
 ### `PATCH /api/v1/project/keys/{prefix}` - Edit project
-Changes one key of this project: `name`, `highThinking`, `translationLanguages`,
+Changes one key of this project: `name`, `highThinking`, `quality`,
+`qualityObjects`, `translationLanguages`,
 `mirrorLanguages`, `aiModelId`, `aiServerId`, `translationModelId`,
 `modelLocked` (each nullable where "null = the project's"), and `isActive`.
 
@@ -110,7 +113,13 @@ curl -X PATCH https://api.xtracting.io/api/v1/project/keys/3f9a2c81 \
 ### `POST /api/v1/extract` - Extract data
 One document: `{"content": "<plain text>", "source": "<URL or path>", "tag": "<optional, yours>"}`.
 `content` up to 2,000,000 characters; long documents are split at submission
-and each piece is billed as one extraction. Answers **202** with
+and each piece is billed as one extraction. A piece is sized so that every AI
+call of the key's quality fits the model's window as the model counts tokens,
+with its output window kept free; `BALANCED` and `DETAILED` cut slightly smaller
+pieces. Where the project's perspectives and objects are so long that no
+piece fits the model at the key's quality, the request is refused with **409**
+`MODEL_TOO_SMALL_FOR_PROJECT` and nothing is queued: shorten the descriptions,
+lower the quality or choose a larger model. Answers **202** with
 `{jobId, totalTasks, status: "QUEUED", expiresAt, pollUrl}`.
 
 ### `POST /api/v1/batch` - Extract data

@@ -119,6 +119,26 @@ Auditor
 - The API refuses a list that breaks these with a 400 naming the field, so a
   changed limit shows up in the error rather than in a silently cut list.
 
+## 5a. Quality - how hard the model looks
+
+Besides the two lists, a project (and each key) has a `defaultQuality`:
+
+- `EFFICIENT` (the default): one AI call reads the document and returns all
+  seven groups at once.
+- `BALANCED`: the source is assessed, then the entities are extracted, then
+  one call per group - ratings, events, market insights, attributes,
+  connections - each reading the entities it is about.
+- `DETAILED`: the same start, then one call per entity for each group, and one
+  call per pair of entities for the connections. The most thorough, and the
+  most expensive by far on documents with many entities.
+
+With `BALANCED` and `DETAILED`, `defaultQualityObjects` chooses which groups
+are extracted at all (the source and the entities always are); a group left
+out comes back as `[]`. Every call is charged, so the price shown - the
+`EFFICIENT` maximum - can be exceeded by a wide margin. Leave the choice to
+the person: start with `EFFICIENT`, and move to `BALANCED` or `DETAILED` for the
+documents where the first round missed things.
+
 ## 6. Reading the first results
 
 In this order, because each step decides whether the next is worth doing:
