@@ -123,21 +123,20 @@ Auditor
 
 Besides the two lists, a project (and each key) has a `defaultQuality`:
 
-- `EFFICIENT` (the default): one AI call reads the document and returns all
-  seven groups at once.
-- `BALANCED`: the source is assessed, then the entities are extracted, then
-  one call per group - ratings, events, market insights, attributes,
-  connections - each reading the entities it is about.
-- `DETAILED`: the same start, then one call per entity for each group, and one
-  call per pair of entities for the connections. The most thorough, and the
-  most expensive by far on documents with many entities.
+- `EFFICIENT` (the default): the lowest cost. In our tests the cheapest models
+  extracted about 20-90% of the data, often around half.
+- `BALANCED`: up to about 7 times the cost of `EFFICIENT`. The cheapest models
+  extracted about 30-100% of the data, mostly over 75%.
+- `PRECISE`: the cost rises steeply with every entity in the document. The
+  cheapest models extracted about 70-100% of the data.
 
-With `BALANCED` and `DETAILED`, `defaultQualityObjects` chooses which groups
-are extracted at all (the source and the entities always are); a group left
-out comes back as `[]`. Every call is charged, so the price shown - the
-`EFFICIENT` maximum - can be exceeded by a wide margin. Leave the choice to
-the person: start with `EFFICIENT`, and move to `BALANCED` or `DETAILED` for the
-documents where the first round missed things.
+With `BALANCED` and `PRECISE`, `defaultQualityObjects` chooses which groups
+are extracted at all - ratings, events, market insights, attributes,
+connections (the source and the entities always are); a group left out comes
+back as `[]`. Both are charged for every AI call, so the price shown - the
+`EFFICIENT` maximum - does not apply to them. Leave the choice to the person:
+start with `EFFICIENT`, and move to `BALANCED` or `PRECISE` for the documents
+where the first round missed things.
 
 ## 6. Reading the first results
 

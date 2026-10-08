@@ -69,8 +69,8 @@ Changes the configuration. Every field is optional; send only what changes.
 | `interestEntities` | `[{name, description}]` | the objects of interest - **the whole list, replacing the stored one** |
 | `perspectives` | `[{name, description}]` | the perspectives - the whole list, replacing the stored one |
 | `defaultHighThinking` | boolean | "Complex Documents": more reasoning, higher price |
-| `defaultQuality` | `EFFICIENT` \| `BALANCED` \| `DETAILED` | how an extraction runs: one AI call; one call per object after the source and the entities; or one call per entity and object plus one per pair of entities for the connections. Every call is charged, so `BALANCED` and `DETAILED` can cost far more than the price shown, which is always the `EFFICIENT` maximum - leave to the person |
-| `defaultQualityObjects` | string[] | what `BALANCED` and `DETAILED` extract besides the source and the entities: any of `ratings`, `events`, `marketinsights`, `attributes`, `connections`; one left out comes back as `[]` |
+| `defaultQuality` | `EFFICIENT` \| `BALANCED` \| `PRECISE` | cost against completeness: `EFFICIENT` costs least; `BALANCED` is more complete and costs up to about 7 times as much; `PRECISE` is the most complete, its cost rising steeply with every entity. Both are charged for every AI call, so the price shown, always the `EFFICIENT` maximum, does not apply to them - leave to the person |
+| `defaultQualityObjects` | string[] | what `BALANCED` and `PRECISE` extract besides the source and the entities: any of `ratings`, `events`, `marketinsights`, `attributes`, `connections`; one left out comes back as `[]` |
 | `defaultTranslationLanguages` | string[] | output languages besides English, names as in `translationTargets` at `https://xtracting.io/api/public/languages` |
 | `aiModelId`, `aiServerId`, `translationModelId`, `modelLocked` | | the model; changing it changes the price - leave to the person |
 | `applyToAllApiKeys` | boolean | copy the project's run settings onto every key that may extract |
@@ -115,7 +115,7 @@ One document: `{"content": "<plain text>", "source": "<URL or path>", "tag": "<o
 `content` up to 2,000,000 characters; long documents are split at submission
 and each piece is billed as one extraction. A piece is sized so that every AI
 call of the key's quality fits the model's window as the model counts tokens,
-with its output window kept free; `BALANCED` and `DETAILED` cut slightly smaller
+with its output window kept free; `BALANCED` and `PRECISE` cut slightly smaller
 pieces. Where the project's perspectives and objects are so long that no
 piece fits the model at the key's quality, the request is refused with **409**
 `MODEL_TOO_SMALL_FOR_PROJECT` and nothing is queued: shorten the descriptions,
